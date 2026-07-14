@@ -83,7 +83,7 @@ function normalizeTagFamilies(value) {
   const output = {};
   for (const [family, tags] of Object.entries(value)) {
     if (!family.trim() || !Array.isArray(tags)) continue;
-    const cleanTags = [...new Set(tags.map((tag) => String(tag).trim().toLocaleLowerCase("ru")).filter(Boolean))].slice(0, 20);
+    const cleanTags = [...new Set(tags.map((tag) => String(tag).trim().toLocaleLowerCase("ru")).filter(Boolean))].slice(0, 99);
     if (cleanTags.length) output[family.slice(0, 160)] = cleanTags.map((tag) => tag.slice(0, 60));
   }
   return output;
