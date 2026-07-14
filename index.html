@@ -56,6 +56,13 @@
     .sidebar-section:first-child { padding-top: 0; }
     .sidebar-section:last-child { border: 0; }
     .section-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 11px; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .section-title-actions { display: flex; align-items: center; gap: 9px; }
+    .section-visibility { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%; color: var(--accent); background: white; cursor: pointer; font-size: 15px; line-height: 1; }
+    .section-visibility:hover { border-color: #9eaaa3; background: var(--accent-soft); }
+    .sidebar-section.collapsed { padding-top: 9px; padding-bottom: 9px; }
+    .sidebar-section.collapsed > :not(.section-title) { display: none !important; }
+    .sidebar-section.collapsed .section-title { margin-bottom: 0; }
+    .sidebar-section.collapsed .section-visibility { color: var(--muted); background: var(--surface-2); }
     .text-button { padding: 2px 0; border: 0; color: var(--accent); background: none; cursor: pointer; font-size: 12px; }
     .text-button:hover { text-decoration: underline; }
     .control { width: 100%; height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: white; }
@@ -136,7 +143,7 @@
     .inverse-tag-button.active { color: white; border-color: var(--danger); background: var(--danger); }
     .tag-scale { display: grid; grid-template-columns: 1fr 46px; align-items: center; gap: 8px; margin-top: 10px; }
     .tag-scale output { font-size: 11px; }
-    #customTagFilters .tag-button { font-size: calc(12px * var(--custom-tag-scale, 1)); }
+    #tagFilters .tag-button, #customTagFilters .tag-button { font-size: calc(12px * var(--custom-tag-scale, 1)); }
     #customTagFilters .tag-button.active { box-shadow: 0 0 0 3px rgba(23,24,22,.28); }
     .tag-manager { display: grid; gap: 14px; }
     .tag-manager-card { padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: white; box-shadow: var(--shadow); }
@@ -251,18 +258,18 @@
 
     <div class="workspace">
       <aside class="sidebar" aria-label="Фильтры каталога">
-        <section class="sidebar-section">
-          <h2 class="section-title">Категория <button class="text-button" type="button" data-clear="categories">Сбросить</button></h2>
+        <section class="sidebar-section" data-sidebar-section="categories">
+          <h2 class="section-title"><span>Категория</span><span class="section-title-actions"><button class="text-button" type="button" data-clear="categories">Сбросить</button><button class="section-visibility" type="button" data-toggle-section="categories" aria-expanded="true" aria-label="Свернуть раздел Категория" title="Свернуть раздел">👁</button></span></h2>
           <div class="check-list" id="categoryFilters"></div>
         </section>
 
-        <section class="sidebar-section">
-          <h2 class="section-title">Столбцы <button class="text-button" type="button" data-action="all-styles">Все</button></h2>
+        <section class="sidebar-section" data-sidebar-section="styles">
+          <h2 class="section-title"><span>Столбцы</span><span class="section-title-actions"><button class="text-button" type="button" data-action="all-styles">Все</button><button class="section-visibility" type="button" data-toggle-section="styles" aria-expanded="true" aria-label="Свернуть раздел Столбцы" title="Свернуть раздел">👁</button></span></h2>
           <div class="check-list style-grid" id="styleFilters"></div>
         </section>
 
-        <section class="sidebar-section">
-          <h2 class="section-title">Семейство содержит <button class="text-button" type="button" data-action="clear-required-styles">Сбросить</button></h2>
+        <section class="sidebar-section" data-sidebar-section="required-styles">
+          <h2 class="section-title"><span>Семейство содержит</span><span class="section-title-actions"><button class="text-button" type="button" data-action="clear-required-styles">Сбросить</button><button class="section-visibility" type="button" data-toggle-section="required-styles" aria-expanded="true" aria-label="Свернуть раздел Семейство содержит" title="Свернуть раздел">👁</button></span></h2>
           <details class="multi-select" id="requiredStylesMenu">
             <summary><span id="requiredStylesSummary">Любые начертания</span><span aria-hidden="true">⌄</span></summary>
             <div class="multi-select-panel">
@@ -272,18 +279,19 @@
           </details>
         </section>
 
-        <section class="sidebar-section">
-          <h2 class="section-title">Теги <button class="text-button" type="button" data-clear="tags">Сбросить</button></h2>
+        <section class="sidebar-section" data-sidebar-section="google-tags">
+          <h2 class="section-title"><span>Теги</span><span class="section-title-actions"><button class="text-button" type="button" data-clear="tags">Сбросить</button><button class="section-visibility" type="button" data-toggle-section="google-tags" aria-expanded="true" aria-label="Свернуть раздел Теги" title="Свернуть раздел">👁</button></span></h2>
           <div class="tag-list" id="tagFilters"></div>
         </section>
 
-        <section class="sidebar-section">
-          <h2 class="section-title">Мои теги <button class="text-button" type="button" data-clear="custom-tags">Сбросить</button></h2>
+        <section class="sidebar-section" data-sidebar-section="custom-tags">
+          <h2 class="section-title"><span>Мои теги</span><span class="section-title-actions"><button class="text-button" type="button" data-clear="custom-tags">Сбросить</button><button class="section-visibility" type="button" data-toggle-section="custom-tags" aria-expanded="true" aria-label="Свернуть раздел Мои теги" title="Свернуть раздел">👁</button></span></h2>
           <div class="tag-list" id="customTagFilters"></div>
           <div class="tag-filter-tools">
             <select class="control" id="customTagSort" aria-label="Сортировка пользовательских тегов"><option value="asc">Теги А—Я</option><option value="desc">Теги Я—А</option></select>
             <button class="inverse-tag-button" id="invertTagFilter" type="button" aria-pressed="false">Инверсия: выкл.</button>
           </div>
+          <label class="tag-store-status" for="tagScale">Масштаб текста всех тегов</label>
           <div class="tag-scale"><input id="tagScale" type="range" min="50" max="200" step="5" value="100" list="tagScaleMarks"><output id="tagScaleOutput" for="tagScale">100%</output></div>
           <datalist id="tagScaleMarks"><option value="50"></option><option value="100"></option><option value="200"></option></datalist>
           <div class="tag-store-status" id="tagStoreStatus"></div>
@@ -294,8 +302,8 @@
           <input class="is-hidden" id="importTagsFile" type="file" accept="application/json,.json">
         </section>
 
-        <section class="sidebar-section">
-          <h2 class="section-title">Дополнительно</h2>
+        <section class="sidebar-section" data-sidebar-section="additional">
+          <h2 class="section-title"><span>Дополнительно</span><button class="section-visibility" type="button" data-toggle-section="additional" aria-expanded="true" aria-label="Свернуть раздел Дополнительно" title="Свернуть раздел">👁</button></h2>
           <div class="check-list">
             <label class="check"><input id="condensedOnly" type="checkbox"> Только Condensed / Narrow</label>
             <label class="check"><input id="variableOnly" type="checkbox"> Только variable</label>
@@ -317,8 +325,8 @@
           </select>
         </section>
 
-        <section class="sidebar-section">
-          <h2 class="section-title">Размер текста</h2>
+        <section class="sidebar-section" data-sidebar-section="text-size">
+          <h2 class="section-title"><span>Размер текста</span><button class="section-visibility" type="button" data-toggle-section="text-size" aria-expanded="true" aria-label="Свернуть раздел Размер текста" title="Свернуть раздел">👁</button></h2>
           <div class="range-row">
             <input id="sizeRange" type="range" min="8" max="72" step="1" value="26">
             <output id="sizeOutput" for="sizeRange">26 pt</output>

@@ -27,6 +27,7 @@ const FALLBACK_FONTS = [
 const DEFAULT_TEXT = "400 г. МАССА. Съешь ещё этих мягких французских булок.";
 const STORAGE_KEY = "ufont-prototype-v1";
 const TAG_DRAFT_STORAGE_KEY = "ufont-user-tags-draft-v1";
+const SIDEBAR_SECTION_IDS = ["categories", "styles", "required-styles", "google-tags", "custom-tags", "additional", "text-size"];
 const $ = (selector) => document.querySelector(selector);
 
 let FONTS = [];
@@ -49,6 +50,7 @@ const state = {
   tagSort: "asc",
   invertTagFilter: false,
   tagScale: 100,
+  collapsedSections: new Set(),
   tagStoreWritable: false,
   tagStoreUpdatedAt: null,
   condensedOnly: false,
@@ -216,6 +218,7 @@ function localStateObject() {
     tagSort: state.tagSort,
     invertTagFilter: state.invertTagFilter,
     tagScale: state.tagScale,
+    collapsedSections: [...state.collapsedSections],
     query: state.query,
     categories: [...state.categories],
     requiredStyles: [...state.requiredStyles],
@@ -259,6 +262,7 @@ function applyPortablePreferences(input) {
   state.tagSort = input.tagSort === "desc" ? "desc" : "asc";
   state.invertTagFilter = Boolean(input.invertTagFilter);
   state.tagScale = clampNumber(input.tagScale, 50, 200, state.tagScale);
+  state.collapsedSections = new Set(cleanStringArray(input.collapsedSections, SIDEBAR_SECTION_IDS.length, 40).filter((id) => SIDEBAR_SECTION_IDS.includes(id)));
   state.query = typeof input.query === "string" ? input.query.slice(0, 160) : state.query;
   state.condensedOnly = Boolean(input.condensedOnly);
   state.variableOnly = Boolean(input.variableOnly);
@@ -323,6 +327,7 @@ function buildControls() {
   ppiInput.value = String(state.previewPpi);
   $("#tagScale").value = String(state.tagScale);
   applyTagScale();
+  syncSidebarSections();
   document.querySelectorAll("#sortOrder option").forEach((option) => option.toggleAttribute("selected", option.value === state.sortOrder));
   updateSize();
   updateViewButtons();
@@ -738,7 +743,12 @@ async function renameManagedTag(oldTag) {
 }
 
 async function deleteManagedTag(tag) {
-  if (!window.confirm(`Удалить тег «${tag}» из всех семейств?`)) return;
+  const confirmation = window.prompt(`Защита от случайного удаления. Чтобы удалить тег «${tag}» из всех семейств, введите его название:`, "");
+  if (confirmation === null) return;
+  if (confirmation.trim().toLocaleLowerCase("ru") !== tag.toLocaleLowerCase("ru")) {
+    window.alert("Название не совпало. Тег не удалён.");
+    return;
+  }
   for (const [family, tags] of [...state.customTags]) {
     const next = tags.filter((item) => item !== tag);
     next.length ? state.customTags.set(family, next) : state.customTags.delete(family);
@@ -749,7 +759,11 @@ async function deleteManagedTag(tag) {
 }
 
 async function clearManagedTags() {
-  if (!window.confirm("Удалить все пользовательские теги, цвета и связи со шрифтами?")) return;
+  const confirmation = window.prompt("Защита от случайного удаления. Чтобы удалить все пользовательские теги, цвета и связи со шрифтами, введите: УДАЛИТЬ ВСЕ", "");
+  if (confirmation !== "УДАЛИТЬ ВСЕ") {
+    if (confirmation !== null) window.alert("Контрольная фраза не совпала. База тегов сохранена без изменений.");
+    return;
+  }
   state.customTags.clear();
   state.tagMeta.clear();
   state.selectedTags.clear();
@@ -899,6 +913,21 @@ function applyTagScale() {
   $("#tagScaleOutput").value = `${state.tagScale}%`;
 }
 
+function syncSidebarSections() {
+  document.querySelectorAll("[data-sidebar-section]").forEach((section) => {
+    const id = section.dataset.sidebarSection;
+    const collapsed = state.collapsedSections.has(id);
+    section.classList.toggle("collapsed", collapsed);
+    const button = section.querySelector(`[data-toggle-section="${id}"]`);
+    if (!button) return;
+    const title = section.querySelector(".section-title > span")?.textContent || "";
+    button.setAttribute("aria-expanded", String(!collapsed));
+    button.setAttribute("aria-label", `${collapsed ? "Развернуть" : "Свернуть"} раздел ${title}`.trim());
+    button.title = collapsed ? "Развернуть раздел" : "Свернуть раздел";
+    button.textContent = collapsed ? "◉" : "👁";
+  });
+}
+
 function updateViewButtons() {
   document.querySelectorAll("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === state.view));
 }
@@ -921,6 +950,7 @@ function syncFilterUI() {
   $("#invertTagFilter").textContent = state.invertTagFilter ? "Инверсия: вкл." : "Инверсия: выкл.";
   $("#tagScale").value = String(state.tagScale);
   applyTagScale();
+  syncSidebarSections();
   searchInput.value = state.query;
 }
 
@@ -994,6 +1024,15 @@ function bindEvents() {
   document.addEventListener("pointerup", endInspectorDrag);
 
   document.addEventListener("click", (event) => {
+    const sectionToggle = event.target.closest("[data-toggle-section]");
+    if (sectionToggle) {
+      const id = sectionToggle.dataset.toggleSection;
+      if (!SIDEBAR_SECTION_IDS.includes(id)) return;
+      state.collapsedSections.has(id) ? state.collapsedSections.delete(id) : state.collapsedSections.add(id);
+      syncSidebarSections();
+      saveState();
+      return;
+    }
     const download = event.target.closest("[data-download-url]");
     if (download) { downloadFont(download); return; }
     const editTags = event.target.closest("[data-edit-tags]");

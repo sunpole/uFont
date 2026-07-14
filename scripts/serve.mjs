@@ -108,7 +108,7 @@ function normalizePreferences(value) {
   if (value == null) return {};
   if (typeof value !== "object" || Array.isArray(value)) throw new Error("preferences must be an object");
   const output = {};
-  const arrayLimits = { visibleStyles: [8, 30], favorites: [3000, 160], rareFonts: [3000, 160], categories: [20, 60], requiredStyles: [8, 30], selectedTags: [99, 60] };
+  const arrayLimits = { visibleStyles: [8, 30], favorites: [3000, 160], rareFonts: [3000, 160], categories: [20, 60], requiredStyles: [8, 30], selectedTags: [99, 60], collapsedSections: [10, 40] };
   for (const [key, [limit, length]] of Object.entries(arrayLimits)) output[key] = normalizeStringArray(value[key], limit, length);
   const strings = { fontScope: 20, sortOrder: 30, previewText: 160, previewUnit: 10, view: 20, tagSort: 10, query: 160 };
   for (const [key, length] of Object.entries(strings)) if (typeof value[key] === "string") output[key] = value[key].slice(0, length);
