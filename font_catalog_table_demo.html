@@ -1,0 +1,39 @@
+<!doctype html><html lang='ru'><head><meta charset='utf-8'><title>Demo</title><style>
+body{font-family:system-ui;margin:0;background:#f3f3f3}header{position:sticky;top:0;background:#fff;padding:12px;border-bottom:1px solid #ddd}
+.row{display:grid;grid-template-columns:220px repeat(8,170px);gap:8px;padding:12px;border-bottom:1px solid #ddd;background:#fff}
+.name{font-size:22px;font-weight:bold}.cell{border:1px solid #ddd;border-radius:8px;padding:8px}.title{font-size:12px;color:#666}.preview{font-size:28px}
+.hide{display:none}
+</style></head><body><header><b>Столбцы:</b><br>
+<label><input type='checkbox' checked value='Regular'>Regular</label>
+<label><input type='checkbox' checked value='Italic'>Italic</label>
+<label><input type='checkbox' checked value='Bold'>Bold</label>
+<label><input type='checkbox' checked value='Bold Italic'>Bold Italic</label>
+<label><input type='checkbox' checked value='Black'>Black</label>
+<label><input type='checkbox' checked value='Black Italic'>Black Italic</label>
+<label><input type='checkbox' checked value='Condensed'>Condensed</label>
+<label><input type='checkbox' checked value='Condensed Italic'>Condensed Italic</label>
+</header><div id='app'></div><script>
+const cols=["Regular","Italic","Bold","Bold Italic","Black","Black Italic","Condensed","Condensed Italic"];
+const fonts=[
+{family:"Roboto",styles:["Regular","Italic","Bold","Bold Italic","Black","Black Italic"]},
+{family:"Roboto Condensed",styles:["Regular","Italic","Bold","Condensed","Condensed Italic"]},
+{family:"Playfair Display",styles:["Regular","Italic","Bold","Bold Italic","Black"]}
+];
+function render(){
+const en=[...document.querySelectorAll("input:checked")].map(x=>x.value);
+app.innerHTML="";
+fonts.forEach(f=>{
+let row=document.createElement("div");row.className="row";
+row.innerHTML="<div class='name'>"+f.family+"</div>";
+cols.forEach(c=>{
+let d=document.createElement("div");
+d.className="cell"+(en.includes(c)?"":" hide");
+if(f.styles.includes(c)){d.innerHTML="<div class=title>"+c+"</div><div class=preview>400 г.</div><div>МАССА</div>";}
+else{d.innerHTML="<div class=title>"+c+"</div><div style='color:#bbb'>—</div>";}
+row.appendChild(d);
+});
+app.appendChild(row);
+});
+}
+document.querySelectorAll("input").forEach(i=>i.onchange=render);render();
+</script></body></html>

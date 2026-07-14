@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>uFont — каталог кириллических шрифтов</title>
+  <meta name="description" content="Рабочий прототип каталога для сравнения кириллических шрифтов и их начертаний.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Roboto+Condensed:ital,wght@0,100..900;1,100..900&family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,600;0,700;0,900;1,100;1,300;1,400;1,500;1,600;1,700;1,900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f4f5f2;
+      --surface: #ffffff;
+      --surface-2: #f0f1ed;
+      --ink: #171816;
+      --muted: #686b64;
+      --line: #dfe1db;
+      --accent: #205f46;
+      --accent-soft: #e0eee7;
+      --danger: #a53a35;
+      --radius: 14px;
+      --shadow: 0 10px 30px rgba(26, 34, 29, .07);
+      --preview-size: 26pt;
+      --name-width: 230px;
+      --cell-width: 190px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--ink); background: var(--bg); font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    button, label, select { -webkit-tap-highlight-color: transparent; }
+    :focus-visible { outline: 3px solid rgba(32, 95, 70, .25); outline-offset: 2px; }
+
+    .app-shell { min-height: 100vh; }
+    .topbar { position: sticky; z-index: 30; top: 0; display: flex; align-items: center; gap: 20px; min-height: 68px; padding: 12px 24px; color: white; background: #18261f; box-shadow: 0 2px 20px rgba(0,0,0,.12); }
+    .brand { display: flex; align-items: baseline; gap: 9px; min-width: max-content; }
+    .brand strong { font-size: 24px; letter-spacing: -.04em; }
+    .brand span { color: #b9c9c0; font-size: 12px; }
+    .top-search { position: relative; flex: 1; max-width: 680px; }
+    .top-search input { width: 100%; height: 42px; padding: 0 42px 0 40px; color: white; border: 1px solid #506259; border-radius: 999px; background: #293a32; }
+    .top-search input::placeholder { color: #b9c2bd; }
+    .top-search::before { content: "⌕"; position: absolute; left: 15px; top: 6px; color: #cbd4cf; font-size: 23px; transform: rotate(-15deg); }
+    .clear-search { position: absolute; right: 7px; top: 5px; width: 32px; height: 32px; border: 0; border-radius: 50%; color: #dbe2de; background: transparent; cursor: pointer; }
+    .clear-search:hover { background: #3b4c44; }
+    .result-count { margin-left: auto; white-space: nowrap; color: #d8e2dc; font-variant-numeric: tabular-nums; }
+
+    .workspace { display: grid; grid-template-columns: 270px minmax(0, 1fr); min-height: calc(100vh - 68px); }
+    .sidebar { position: sticky; top: 68px; height: calc(100vh - 68px); overflow: auto; padding: 20px 18px 40px; border-right: 1px solid var(--line); background: var(--surface); }
+    .sidebar-section { padding: 17px 0; border-bottom: 1px solid var(--line); }
+    .sidebar-section:first-child { padding-top: 0; }
+    .sidebar-section:last-child { border: 0; }
+    .section-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 11px; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .text-button { padding: 2px 0; border: 0; color: var(--accent); background: none; cursor: pointer; font-size: 12px; }
+    .text-button:hover { text-decoration: underline; }
+    .control { width: 100%; height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: white; }
+    .range-row { display: grid; grid-template-columns: 1fr 48px; align-items: center; gap: 10px; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+    output { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+    .ppi-row { display: grid; grid-template-columns: 1fr 82px; align-items: center; gap: 10px; margin-top: 12px; }
+    .ppi-row label { color: var(--muted); font-size: 12px; }
+    .ppi-input { width: 100%; height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: white; font-variant-numeric: tabular-nums; }
+    .size-conversion { margin-top: 10px; padding: 9px 10px; border-radius: 8px; color: #385446; background: var(--accent-soft); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .size-conversion strong { color: var(--ink); }
+    .check-list { display: grid; gap: 7px; }
+    .check { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+    .check input { width: 17px; height: 17px; margin: 0; accent-color: var(--accent); }
+    .style-grid { grid-template-columns: 1fr 1fr; }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 7px; }
+    .tag-button { padding: 5px 9px; border: 1px solid var(--line); border-radius: 999px; background: white; cursor: pointer; font-size: 12px; }
+    .tag-button:hover { border-color: #9eaaa3; }
+    .tag-button.active { color: #fff; border-color: var(--accent); background: var(--accent); }
+
+    .content { min-width: 0; padding: 22px 24px 50px; }
+    .tool-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+    .preview-input-wrap { flex: 1; min-width: 260px; }
+    .preview-input { width: 100%; height: 46px; padding: 0 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); box-shadow: 0 1px 0 rgba(0,0,0,.02); }
+    .segmented { display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    .segmented button { min-height: 36px; padding: 0 13px; border: 0; border-radius: 7px; background: transparent; cursor: pointer; }
+    .segmented button.active { color: #fff; background: var(--accent); }
+    .reset-button { min-height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; }
+    .reset-button:hover { border-color: #aab2ad; }
+    .notice { display: none; margin-bottom: 14px; padding: 10px 13px; border: 1px solid #ebd9a6; border-radius: 10px; color: #64531f; background: #fff8dd; }
+    .notice.show { display: block; }
+
+    .table-card { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+    .font-table-scroll { overflow: auto; max-height: calc(100vh - 164px); overscroll-behavior: contain; }
+    .font-table { display: grid; width: max-content; min-width: 100%; }
+    .table-row { display: grid; grid-template-columns: var(--name-width) repeat(var(--visible-cols), var(--cell-width)); min-width: max-content; border-bottom: 1px solid var(--line); background: var(--surface); }
+    .table-row:last-child { border-bottom: 0; }
+    .table-row:hover:not(.header-row) > * { background-color: #fbfcfa; }
+    .header-row { position: sticky; z-index: 12; top: 0; color: var(--muted); background: var(--surface-2); font-size: 11px; font-weight: 800; letter-spacing: .065em; text-transform: uppercase; }
+    .header-cell, .font-name-cell, .font-cell { min-width: 0; padding: 13px; border-right: 1px solid var(--line); }
+    .header-cell:last-child, .font-cell:last-child { border-right: 0; }
+    .header-cell { min-height: 44px; }
+    .header-cell:first-child, .font-name-cell { position: sticky; z-index: 7; left: 0; background: var(--surface); }
+    .header-cell:first-child { z-index: 15; background: var(--surface-2); }
+    .font-name-cell { min-height: 132px; }
+    .family-line { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
+    .family-name { overflow-wrap: anywhere; font-size: 19px; font-weight: 750; line-height: 1.12; letter-spacing: -.025em; }
+    .favorite { flex: none; width: 30px; height: 30px; border: 0; border-radius: 50%; color: #a2a69f; background: transparent; cursor: pointer; font-size: 20px; line-height: 1; }
+    .favorite:hover { color: #c78418; background: #fff4dd; }
+    .favorite.active { color: #c78418; }
+    .meta { margin-top: 7px; color: var(--muted); font-size: 12px; }
+    .row-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 11px; }
+    .mini-tag { padding: 2px 6px; border: 0; border-radius: 999px; color: #536159; background: #edf1ee; cursor: pointer; font-size: 10px; }
+    .mini-tag:hover { color: var(--accent); background: var(--accent-soft); }
+    .font-cell { min-height: 132px; overflow: hidden; }
+    .style-label { margin-bottom: 12px; color: var(--muted); font-size: 11px; }
+    .sample { font-size: var(--preview-size); line-height: 1.12; overflow-wrap: anywhere; }
+    .missing { display: grid; place-items: center; min-height: 90px; color: #bdc1bb; font-size: 23px; }
+
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+    .gallery-card { min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+    .gallery-card .sample { min-height: 82px; margin: 26px 0 20px; }
+    .style-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .style-pill { padding: 4px 8px; border-radius: 7px; color: var(--muted); background: var(--surface-2); font-size: 11px; }
+    .empty-state { padding: 70px 20px; border: 1px dashed #c8ccc6; border-radius: var(--radius); color: var(--muted); background: rgba(255,255,255,.6); text-align: center; }
+    .empty-state strong { display: block; margin-bottom: 6px; color: var(--ink); font-size: 20px; }
+    .is-hidden { display: none !important; }
+
+    @media (max-width: 900px) {
+      .topbar { flex-wrap: wrap; gap: 9px 14px; padding: 10px 16px; }
+      .top-search { order: 3; flex-basis: 100%; max-width: none; }
+      .workspace { grid-template-columns: 1fr; }
+      .sidebar { position: static; display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 0 20px; width: auto; height: auto; overflow: visible; padding: 16px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .sidebar-section:first-child { padding-top: 17px; }
+      .content { padding: 16px 12px 36px; }
+      .font-table-scroll { max-height: none; }
+      .header-row { top: 0; }
+    }
+    @media (max-width: 560px) {
+      :root { --name-width: 165px; --cell-width: 165px; }
+      .brand span, .result-count { display: none; }
+      .sidebar { grid-template-columns: 1fr; }
+      .style-grid { grid-template-columns: 1fr 1fr; }
+      .tool-row { align-items: stretch; }
+      .segmented { width: 100%; }
+      .segmented button { flex: 1; }
+      .gallery { grid-template-columns: 1fr; }
+      .font-name-cell { min-height: 122px; }
+      .font-cell { min-height: 122px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand"><strong>uFont</strong><span>кириллический каталог</span></div>
+      <div class="top-search">
+        <label class="is-hidden" for="searchInput">Поиск шрифта</label>
+        <input id="searchInput" type="search" placeholder="Поиск по названию, дизайнеру или тегу…" autocomplete="off">
+        <button class="clear-search is-hidden" id="clearSearch" type="button" aria-label="Очистить поиск">×</button>
+      </div>
+      <div class="result-count" id="resultCount" aria-live="polite"></div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar" aria-label="Фильтры каталога">
+        <section class="sidebar-section">
+          <h2 class="section-title">Категория <button class="text-button" type="button" data-clear="categories">Сбросить</button></h2>
+          <div class="check-list" id="categoryFilters"></div>
+        </section>
+
+        <section class="sidebar-section">
+          <h2 class="section-title">Столбцы <button class="text-button" type="button" data-action="all-styles">Все</button></h2>
+          <div class="check-list style-grid" id="styleFilters"></div>
+        </section>
+
+        <section class="sidebar-section">
+          <h2 class="section-title">Семейство содержит</h2>
+          <select class="control" id="requireStyle">
+            <option value="">Любые начертания</option>
+          </select>
+        </section>
+
+        <section class="sidebar-section">
+          <h2 class="section-title">Теги <button class="text-button" type="button" data-clear="tags">Сбросить</button></h2>
+          <div class="tag-list" id="tagFilters"></div>
+        </section>
+
+        <section class="sidebar-section">
+          <h2 class="section-title">Дополнительно</h2>
+          <div class="check-list">
+            <label class="check"><input id="variableOnly" type="checkbox"> Только variable</label>
+            <label class="check"><input id="favoritesOnly" type="checkbox"> Только избранные</label>
+          </div>
+        </section>
+
+        <section class="sidebar-section">
+          <h2 class="section-title">Размер текста</h2>
+          <div class="range-row">
+            <input id="sizeRange" type="range" min="8" max="72" step="1" value="26">
+            <output id="sizeOutput" for="sizeRange">26 pt</output>
+          </div>
+          <div class="ppi-row">
+            <label for="ppiInput">Разрешение печати, PPI</label>
+            <input class="ppi-input" id="ppiInput" type="number" min="72" max="2400" step="1" value="300" inputmode="numeric">
+          </div>
+          <div class="size-conversion" id="sizeConversion" aria-live="polite"></div>
+        </section>
+      </aside>
+
+      <main class="content">
+        <div class="tool-row">
+          <div class="preview-input-wrap">
+            <label class="is-hidden" for="previewInput">Текст для сравнения</label>
+            <input class="preview-input" id="previewInput" value="400 г. МАССА. Съешь ещё этих мягких французских булок." maxlength="160">
+          </div>
+          <div class="segmented" aria-label="Режим отображения">
+            <button class="active" type="button" data-view="table">Таблица</button>
+            <button type="button" data-view="gallery">Галерея</button>
+          </div>
+          <button class="reset-button" id="resetButton" type="button">Сбросить всё</button>
+        </div>
+
+        <div class="notice" id="fontNotice">Не удалось загрузить веб-шрифты. Проверьте подключение к интернету — сейчас показаны системные замены.</div>
+        <section id="catalog" aria-label="Каталог шрифтов"></section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    "use strict";
+
+    const STYLE_DEFS = [
+      { id: "regular", name: "Regular", weight: 400, italic: false },
+      { id: "italic", name: "Italic", weight: 400, italic: true },
+      { id: "medium", name: "Medium", weight: 500, italic: false },
+      { id: "semibold", name: "SemiBold", weight: 600, italic: false },
+      { id: "bold", name: "Bold", weight: 700, italic: false },
+      { id: "bold-italic", name: "Bold Italic", weight: 700, italic: true },
+      { id: "black", name: "Black", weight: 900, italic: false },
+      { id: "black-italic", name: "Black Italic", weight: 900, italic: true }
+    ];
+
+    const FONTS = [
+      {
+        family: "Roboto",
+        designer: "Christian Robertson",
+        category: "sans-serif",
+        variable: false,
+        tags: ["sans", "ui", "neutral", "web"],
+        styles: STYLE_DEFS.map(style => style.id)
+      },
+      {
+        family: "Roboto Condensed",
+        designer: "Christian Robertson",
+        category: "sans-serif",
+        variable: true,
+        tags: ["sans", "condensed", "headline", "space-saving"],
+        styles: STYLE_DEFS.map(style => style.id)
+      },
+      {
+        family: "Playfair Display",
+        designer: "Claus Eggers Sørensen",
+        category: "serif",
+        variable: true,
+        tags: ["serif", "editorial", "luxury", "display"],
+        styles: ["regular", "italic", "medium", "semibold", "bold", "bold-italic", "black", "black-italic"]
+      }
+    ];
+
+    const DEFAULT_TEXT = "400 г. МАССА. Съешь ещё этих мягких французских булок.";
+    const STORAGE_KEY = "ufont-prototype-v1";
+    const categories = [...new Set(FONTS.map(font => font.category))];
+    const tags = [...new Set(FONTS.flatMap(font => font.tags))].sort((a, b) => a.localeCompare(b, "ru"));
+
+    const state = {
+      query: "",
+      categories: new Set(),
+      visibleStyles: new Set(STYLE_DEFS.map(style => style.id)),
+      requiredStyle: "",
+      selectedTags: new Set(),
+      variableOnly: false,
+      favoritesOnly: false,
+      favorites: new Set(),
+      previewText: DEFAULT_TEXT,
+      previewSize: 26,
+      previewPpi: 300,
+      view: "table"
+    };
+
+    const $ = selector => document.querySelector(selector);
+    const catalog = $("#catalog");
+    const searchInput = $("#searchInput");
+    const previewInput = $("#previewInput");
+    const sizeRange = $("#sizeRange");
+    const ppiInput = $("#ppiInput");
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[char]));
+    }
+
+    function loadState() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        if (!saved) return;
+        state.visibleStyles = new Set((saved.visibleStyles || []).filter(id => STYLE_DEFS.some(style => style.id === id)));
+        if (!state.visibleStyles.size) state.visibleStyles.add("regular");
+        state.favorites = new Set(saved.favorites || []);
+        state.previewText = typeof saved.previewText === "string" ? saved.previewText : DEFAULT_TEXT;
+        const savedSize = Number(saved.previewSize);
+        const sizeInPoints = saved.previewUnit === "pt" ? savedSize : Math.round(savedSize * 0.75);
+        state.previewSize = Math.min(72, Math.max(8, sizeInPoints || 26));
+        state.previewPpi = Math.min(2400, Math.max(72, Number(saved.previewPpi) || 300));
+        state.view = saved.view === "gallery" ? "gallery" : "table";
+      } catch (error) {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        visibleStyles: [...state.visibleStyles],
+        favorites: [...state.favorites],
+        previewText: state.previewText,
+        previewSize: state.previewSize,
+        previewUnit: "pt",
+        previewPpi: state.previewPpi,
+        view: state.view
+      }));
+    }
+
+    function buildControls() {
+      $("#categoryFilters").innerHTML = categories.map(category => `
+        <label class="check"><input type="checkbox" value="${escapeHtml(category)}"> ${escapeHtml(category)}</label>
+      `).join("");
+
+      $("#styleFilters").innerHTML = STYLE_DEFS.map(style => `
+        <label class="check"><input type="checkbox" value="${style.id}" ${state.visibleStyles.has(style.id) ? "checked" : ""}> ${escapeHtml(style.name)}</label>
+      `).join("");
+
+      $("#requireStyle").insertAdjacentHTML("beforeend", STYLE_DEFS.map(style =>
+        `<option value="${style.id}">${escapeHtml(style.name)}</option>`
+      ).join(""));
+
+      $("#tagFilters").innerHTML = tags.map(tag =>
+        `<button class="tag-button" type="button" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`
+      ).join("");
+
+      previewInput.value = state.previewText;
+      sizeRange.value = String(state.previewSize);
+      ppiInput.value = String(state.previewPpi);
+      updateSize();
+      updateViewButtons();
+    }
+
+    function filteredFonts() {
+      const query = state.query.trim().toLocaleLowerCase("ru");
+      return FONTS.filter(font => {
+        const haystack = [font.family, font.designer, font.category, ...font.tags].join(" ").toLocaleLowerCase("ru");
+        if (query && !haystack.includes(query)) return false;
+        if (state.categories.size && !state.categories.has(font.category)) return false;
+        if (state.requiredStyle && !font.styles.includes(state.requiredStyle)) return false;
+        if (state.selectedTags.size && [...state.selectedTags].some(tag => !font.tags.includes(tag))) return false;
+        if (state.variableOnly && !font.variable) return false;
+        if (state.favoritesOnly && !state.favorites.has(font.family)) return false;
+        return true;
+      });
+    }
+
+    function render() {
+      const fonts = filteredFonts();
+      const visibleStyles = STYLE_DEFS.filter(style => state.visibleStyles.has(style.id));
+      $("#resultCount").textContent = `Найдено: ${fonts.length} из ${FONTS.length}`;
+      $("#clearSearch").classList.toggle("is-hidden", !state.query);
+
+      if (!fonts.length) {
+        catalog.innerHTML = `<div class="empty-state"><strong>Ничего не найдено</strong>Попробуйте убрать часть фильтров или изменить запрос.</div>`;
+        return;
+      }
+
+      if (state.view === "gallery") {
+        renderGallery(fonts, visibleStyles);
+      } else {
+        renderTable(fonts, visibleStyles);
+      }
+    }
+
+    function renderTable(fonts, visibleStyles) {
+      if (!visibleStyles.length) {
+        catalog.innerHTML = `<div class="empty-state"><strong>Не выбраны столбцы</strong>Отметьте хотя бы одно начертание в фильтре «Столбцы».</div>`;
+        return;
+      }
+
+      catalog.innerHTML = `
+        <div class="table-card">
+          <div class="font-table-scroll">
+            <div class="font-table" style="--visible-cols:${visibleStyles.length}">
+              <div class="table-row header-row">
+                <div class="header-cell">Семейство</div>
+                ${visibleStyles.map(style => `<div class="header-cell">${escapeHtml(style.name)}</div>`).join("")}
+              </div>
+              ${fonts.map(font => `
+                <article class="table-row">
+                  ${renderNameCell(font)}
+                  ${visibleStyles.map(style => renderFontCell(font, style)).join("")}
+                </article>
+              `).join("")}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderGallery(fonts, visibleStyles) {
+      const galleryStyle = visibleStyles[0] || STYLE_DEFS[0];
+      catalog.innerHTML = `<div class="gallery">${fonts.map(font => `
+        <article class="gallery-card">
+          <div class="family-line">
+            <div>
+              <div class="family-name">${escapeHtml(font.family)}</div>
+              <div class="meta">${escapeHtml(font.designer)} · ${escapeHtml(font.category)}${font.variable ? " · Variable" : ""}</div>
+            </div>
+            ${favoriteButton(font)}
+          </div>
+          <div class="sample" style="${fontStyle(font, galleryStyle)}">${escapeHtml(state.previewText || " ")}</div>
+          <div class="style-pills">${STYLE_DEFS.filter(style => font.styles.includes(style.id)).map(style => `<span class="style-pill">${escapeHtml(style.name)}</span>`).join("")}</div>
+          <div class="row-tags">${font.tags.map(tag => `<button class="mini-tag" type="button" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`).join("")}</div>
+        </article>
+      `).join("")}</div>`;
+    }
+
+    function renderNameCell(font) {
+      return `<div class="font-name-cell">
+        <div class="family-line">
+          <div class="family-name">${escapeHtml(font.family)}</div>
+          ${favoriteButton(font)}
+        </div>
+        <div class="meta">${escapeHtml(font.designer)}<br>${escapeHtml(font.category)}${font.variable ? " · Variable" : ""}</div>
+        <div class="row-tags">${font.tags.slice(0, 3).map(tag => `<button class="mini-tag" type="button" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`).join("")}</div>
+      </div>`;
+    }
+
+    function favoriteButton(font) {
+      const active = state.favorites.has(font.family);
+      return `<button class="favorite ${active ? "active" : ""}" type="button" data-favorite="${escapeHtml(font.family)}" aria-label="${active ? "Убрать из избранного" : "Добавить в избранное"}" aria-pressed="${active}">${active ? "★" : "☆"}</button>`;
+    }
+
+    function renderFontCell(font, style) {
+      if (!font.styles.includes(style.id)) return `<div class="font-cell"><div class="style-label">Нет начертания</div><div class="missing">—</div></div>`;
+      return `<div class="font-cell">
+        <div class="style-label">${style.weight} · ${style.italic ? "курсив" : "прямое"}</div>
+        <div class="sample" style="${fontStyle(font, style)}">${escapeHtml(state.previewText || " ")}</div>
+      </div>`;
+    }
+
+    function fontStyle(font, style) {
+      return `font-family:&quot;${escapeHtml(font.family)}&quot;,${font.category};font-weight:${style.weight};font-style:${style.italic ? "italic" : "normal"}`;
+    }
+
+    function updateSize() {
+      state.previewSize = Number(sizeRange.value);
+      state.previewPpi = Math.min(2400, Math.max(72, Number(ppiInput.value) || 300));
+      document.documentElement.style.setProperty("--preview-size", `${state.previewSize}pt`);
+      $("#sizeOutput").value = `${state.previewSize} pt`;
+      const millimeters = state.previewSize * 25.4 / 72;
+      const printPixels = state.previewSize * state.previewPpi / 72;
+      const pixelsPerMillimeter = state.previewPpi / 25.4;
+      $("#sizeConversion").innerHTML = `<strong>${millimeters.toFixed(2)} мм</strong> · ≈${Math.round(printPixels)} px при ${state.previewPpi} PPI<br>${pixelsPerMillimeter.toFixed(3)} px на 1 мм`;
+    }
+
+    function updateViewButtons() {
+      document.querySelectorAll("[data-view]").forEach(button => button.classList.toggle("active", button.dataset.view === state.view));
+    }
+
+    function syncFilterUI() {
+      document.querySelectorAll("#categoryFilters input").forEach(input => { input.checked = state.categories.has(input.value); });
+      document.querySelectorAll("#styleFilters input").forEach(input => { input.checked = state.visibleStyles.has(input.value); });
+      document.querySelectorAll("#tagFilters [data-tag]").forEach(button => button.classList.toggle("active", state.selectedTags.has(button.dataset.tag)));
+      $("#requireStyle").value = state.requiredStyle;
+      $("#variableOnly").checked = state.variableOnly;
+      $("#favoritesOnly").checked = state.favoritesOnly;
+      searchInput.value = state.query;
+    }
+
+    function resetFilters() {
+      state.query = "";
+      state.categories.clear();
+      state.visibleStyles = new Set(STYLE_DEFS.map(style => style.id));
+      state.requiredStyle = "";
+      state.selectedTags.clear();
+      state.variableOnly = false;
+      state.favoritesOnly = false;
+      state.previewText = DEFAULT_TEXT;
+      state.previewSize = 26;
+      state.previewPpi = 300;
+      state.view = "table";
+      previewInput.value = state.previewText;
+      sizeRange.value = String(state.previewSize);
+      ppiInput.value = String(state.previewPpi);
+      updateSize();
+      updateViewButtons();
+      syncFilterUI();
+      saveState();
+      render();
+    }
+
+    function bindEvents() {
+      searchInput.addEventListener("input", event => { state.query = event.target.value; render(); });
+      $("#clearSearch").addEventListener("click", () => { state.query = ""; searchInput.value = ""; searchInput.focus(); render(); });
+      previewInput.addEventListener("input", event => { state.previewText = event.target.value; saveState(); render(); });
+      sizeRange.addEventListener("input", () => { updateSize(); saveState(); });
+      ppiInput.addEventListener("input", () => { updateSize(); saveState(); });
+      ppiInput.addEventListener("change", () => { ppiInput.value = String(state.previewPpi); });
+      $("#categoryFilters").addEventListener("change", event => {
+        event.target.checked ? state.categories.add(event.target.value) : state.categories.delete(event.target.value);
+        render();
+      });
+      $("#styleFilters").addEventListener("change", event => {
+        event.target.checked ? state.visibleStyles.add(event.target.value) : state.visibleStyles.delete(event.target.value);
+        saveState(); render();
+      });
+      $("#requireStyle").addEventListener("change", event => { state.requiredStyle = event.target.value; render(); });
+      $("#variableOnly").addEventListener("change", event => { state.variableOnly = event.target.checked; render(); });
+      $("#favoritesOnly").addEventListener("change", event => { state.favoritesOnly = event.target.checked; render(); });
+      $("#tagFilters").addEventListener("click", event => {
+        const button = event.target.closest("[data-tag]");
+        if (!button) return;
+        const tag = button.dataset.tag;
+        state.selectedTags.has(tag) ? state.selectedTags.delete(tag) : state.selectedTags.add(tag);
+        syncFilterUI(); render();
+      });
+      document.addEventListener("click", event => {
+        const favorite = event.target.closest("[data-favorite]");
+        if (favorite) {
+          const family = favorite.dataset.favorite;
+          state.favorites.has(family) ? state.favorites.delete(family) : state.favorites.add(family);
+          saveState(); render(); return;
+        }
+        const miniTag = event.target.closest(".mini-tag[data-tag]");
+        if (miniTag) {
+          state.selectedTags.add(miniTag.dataset.tag);
+          syncFilterUI(); render(); return;
+        }
+        const viewButton = event.target.closest("[data-view]");
+        if (viewButton) {
+          state.view = viewButton.dataset.view;
+          updateViewButtons(); saveState(); render(); return;
+        }
+        const clearButton = event.target.closest("[data-clear]");
+        if (clearButton?.dataset.clear === "categories") state.categories.clear();
+        if (clearButton?.dataset.clear === "tags") state.selectedTags.clear();
+        if (clearButton) { syncFilterUI(); render(); return; }
+        if (event.target.closest("[data-action='all-styles']")) {
+          state.visibleStyles = new Set(STYLE_DEFS.map(style => style.id));
+          syncFilterUI(); saveState(); render();
+        }
+      });
+      $("#resetButton").addEventListener("click", resetFilters);
+    }
+
+    async function checkFonts() {
+      if (!document.fonts?.load) return;
+      try {
+        await Promise.race([
+          Promise.all(FONTS.map(font => document.fonts.load(`400 16px "${font.family}"`))),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 7000))
+        ]);
+        const loaded = FONTS.every(font => document.fonts.check(`400 16px "${font.family}"`));
+        $("#fontNotice").classList.toggle("show", !loaded);
+      } catch (error) {
+        $("#fontNotice").classList.add("show");
+      }
+    }
+
+    loadState();
+    buildControls();
+    bindEvents();
+    render();
+    checkFonts();
+  </script>
+</body>
+</html>

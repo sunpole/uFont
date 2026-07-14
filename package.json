@@ -1,0 +1,14 @@
+{
+  "name": "ufont",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Каталог кириллических Google Fonts для дизайнеров",
+  "scripts": {
+    "update:fonts": "node --env-file=.env scripts/update-google-fonts.mjs",
+    "check:generator": "node --check scripts/update-google-fonts.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
