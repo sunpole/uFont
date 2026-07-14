@@ -461,12 +461,11 @@ function renderGallery(fonts, visibleStyles) {
 }
 
 function renderMatrix(fonts, visibleStyles) {
-  const style = visibleStyles[0] || STYLE_DEFS.find((item) => item.id === "regular") || STYLE_DEFS[0];
-  catalog.innerHTML = `<div class="matrix">${fonts.map((font) => `<article class="matrix-card" data-font-id="${escapeHtml(font.id)}">
-    <div class="family-line"><div class="family-name">${escapeHtml(font.family)}</div>${familyActions(font)}</div>
-    <div class="sample" style="${fontStyle(font, styleForFont(font, [style]))}">${escapeHtml(state.previewText || " ")}</div>
-    <div class="row-tags">${renderFontTags(font, 2)}</div>
-  </article>`).join("")}</div>`;
+  const styles = visibleStyles.length ? visibleStyles : [STYLE_DEFS.find((item) => item.id === "regular") || STYLE_DEFS[0]];
+  catalog.innerHTML = `<div class="matrix-scroll"><div class="matrix-grid" style="--visible-cols:${styles.length}">
+    <div class="matrix-row matrix-header"><div class="matrix-family">Семейство</div>${styles.map((style) => `<div class="matrix-cell">${escapeHtml(style.name)}</div>`).join("")}</div>
+    ${fonts.map((font) => `<article class="matrix-row" data-font-id="${escapeHtml(font.id)}"><div class="matrix-family">${escapeHtml(font.family)}</div>${styles.map((style) => font.styles.includes(style.id) ? `<div class="matrix-cell" style="${fontStyle(font, style)}">${escapeHtml(state.previewText || " ")}</div>` : `<div class="matrix-cell missing">—</div>`).join("")}</article>`).join("")}
+  </div></div>`;
 }
 
 function renderLoupe(fonts, visibleStyles) {
@@ -949,7 +948,8 @@ function renderFontCell(font, style) {
   const download = font.downloads[style.id];
   return `<div class="font-cell"><div class="style-top"><div class="style-label">${style.weight} · ${style.italic ? "курсив" : "прямое"}</div>
     ${download ? `<button class="download-link" type="button" data-download-url="${escapeHtml(download.url)}" data-download-name="${escapeHtml(download.fileName)}">↓ TTF</button>` : ""}</div>
-    <div class="sample" style="${fontStyle(font, style)}">${escapeHtml(state.previewText || " ")}</div></div>`;
+    <div class="sample" style="${fontStyle(font, style)}">${escapeHtml(state.previewText || " ")}</div>
+    <div class="cell-loupe" aria-hidden="true"><div class="sample" style="${fontStyle(font, style)}">${escapeHtml(state.previewText || " ")}</div><div class="cell-loupe-extra" style="${fontStyle(font, style)}">Аа Бб Вв 0123456789 · ${escapeHtml(style.name)}</div></div></div>`;
 }
 
 function fontStyle(font, style) {
