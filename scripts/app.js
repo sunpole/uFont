@@ -40,21 +40,52 @@ const state = {
   query: "",
   categories: new Set(),
   visibleStyles: new Set(STYLE_DEFS.map((style) => style.id)),
-  requiredStyle: "",
+  requiredStyles: new Set(),
   selectedTags: new Set(),
   customTags: new Map(),
   tagStoreWritable: false,
   tagStoreUpdatedAt: null,
   condensedOnly: false,
   variableOnly: false,
-  favoritesOnly: false,
+  fontScope: "working",
   sortOrder: "alphabetical",
   favorites: new Set(),
+  rareFonts: new Set(),
   previewText: DEFAULT_TEXT,
   previewSize: 26,
   previewPpi: 300,
-  view: "table"
+  view: "table",
+  inspector: {
+    activeLayer: "top",
+    moveStep: 1,
+    topFamily: "",
+    topStyle: "regular",
+    topX: 48,
+    topY: 80,
+    topSize: 54,
+    topScale: 100,
+    topOpacity: 100,
+    topColor: "#171816",
+    topBlend: "normal",
+    bottomType: "none",
+    bottomFamily: "",
+    bottomStyle: "regular",
+    bottomX: 28,
+    bottomY: 220,
+    bottomSize: 54,
+    bottomScale: 100,
+    bottomOpacity: 55,
+    bottomColor: "#b22f2f",
+    bottomBlend: "multiply",
+    imageUrl: "",
+    imageName: ""
+  }
 };
+
+let inspectorDrag = null;
+let lastInspectorWheelAt = 0;
+let inspectorTouchStartX = null;
+let inspectorSuppressClickUntil = 0;
 
 const catalog = $("#catalog");
 const searchInput = $("#searchInput");
@@ -160,13 +191,15 @@ function loadState() {
     state.visibleStyles = new Set((saved.visibleStyles || []).filter((id) => STYLE_DEFS.some((style) => style.id === id)));
     if (!state.visibleStyles.size) state.visibleStyles.add("regular");
     state.favorites = new Set(saved.favorites || []);
+    state.rareFonts = new Set(saved.rareFonts || []);
+    state.fontScope = ["working", "all", "favorites", "rare", "marked"].includes(saved.fontScope) ? saved.fontScope : "working";
     state.sortOrder = ["alphabetical", "custom-tags", "condensed", "favorites"].includes(saved.sortOrder) ? saved.sortOrder : "alphabetical";
     state.previewText = typeof saved.previewText === "string" ? saved.previewText : DEFAULT_TEXT;
     const savedSize = Number(saved.previewSize);
     const sizeInPoints = saved.previewUnit === "pt" ? savedSize : Math.round(savedSize * 0.75);
     state.previewSize = Math.min(72, Math.max(8, sizeInPoints || 26));
     state.previewPpi = Math.min(2400, Math.max(72, Number(saved.previewPpi) || 300));
-    state.view = saved.view === "gallery" ? "gallery" : "table";
+    state.view = ["table", "gallery", "inspector"].includes(saved.view) ? saved.view : "table";
   } catch {
     localStorage.removeItem(STORAGE_KEY);
   }
@@ -176,6 +209,8 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     visibleStyles: [...state.visibleStyles],
     favorites: [...state.favorites],
+    rareFonts: [...state.rareFonts],
+    fontScope: state.fontScope,
     sortOrder: state.sortOrder,
     previewText: state.previewText,
     previewSize: state.previewSize,
@@ -192,7 +227,9 @@ function buildControls() {
   $("#styleFilters").innerHTML = STYLE_DEFS.map((style) => `
     <label class="check"><input type="checkbox" value="${style.id}" ${state.visibleStyles.has(style.id) ? "checked" : ""}> ${escapeHtml(style.name)}</label>
   `).join("");
-  $("#requireStyle").innerHTML = `<option value="">Любые начертания</option>${STYLE_DEFS.map((style) => `<option value="${style.id}">${escapeHtml(style.name)}</option>`).join("")}`;
+  $("#requiredStyleFilters").innerHTML = STYLE_DEFS.map((style) => `
+    <label class="check"><input type="checkbox" value="${style.id}"> ${escapeHtml(style.name)}</label>
+  `).join("");
   $("#tagFilters").innerHTML = filterTags.map((tag) => `<button class="tag-button" type="button" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`).join("");
   renderCustomTagFilters();
   previewInput.value = state.previewText;
@@ -210,11 +247,16 @@ function filteredFonts() {
     const haystack = [font.family, font.category, ...tags].join(" ").toLocaleLowerCase("ru");
     if (query && !haystack.includes(query)) return false;
     if (state.categories.size && !state.categories.has(font.category)) return false;
-    if (state.requiredStyle && !font.styles.includes(state.requiredStyle)) return false;
+    if (state.requiredStyles.size && [...state.requiredStyles].some((style) => !font.styles.includes(style))) return false;
     if (state.selectedTags.size && [...state.selectedTags].some((tag) => !tags.includes(tag))) return false;
     if (state.condensedOnly && !font.isCondensed) return false;
     if (state.variableOnly && !font.variable) return false;
-    if (state.favoritesOnly && !state.favorites.has(font.family)) return false;
+    const isFavorite = state.favorites.has(font.family);
+    const isRare = state.rareFonts.has(font.family);
+    if (state.fontScope === "working" && isRare) return false;
+    if (state.fontScope === "favorites" && !isFavorite) return false;
+    if (state.fontScope === "rare" && !isRare) return false;
+    if (state.fontScope === "marked" && !isFavorite && !isRare) return false;
     return true;
   }).sort(compareFonts);
 }
@@ -237,6 +279,11 @@ function render() {
     catalog.innerHTML = `<div class="empty-state"><strong>Ничего не найдено</strong>Попробуйте убрать часть фильтров или изменить запрос.</div>`;
     return;
   }
+  if (state.view === "inspector") {
+    renderInspector(fonts);
+    observeRenderedFonts();
+    return;
+  }
   state.view === "gallery" ? renderGallery(fonts, visibleStyles) : renderTable(fonts, visibleStyles);
   observeRenderedFonts();
 }
@@ -256,7 +303,7 @@ function renderGallery(fonts, visibleStyles) {
   const galleryStyle = visibleStyles[0] || STYLE_DEFS[0];
   catalog.innerHTML = `<div class="gallery">${fonts.map((font) => `
     <article class="gallery-card" data-font-id="${escapeHtml(font.id)}">
-      <div class="family-line"><div><div class="family-name">${escapeHtml(font.family)}</div><div class="meta">${escapeHtml(font.category)}${font.isCondensed ? " · Condensed" : ""}${font.variable ? " · Variable" : ""}</div></div>${familyActions(font)}</div>
+      <div class="family-line"><div><div class="family-title">${rareButton(font)}<div class="family-name">${escapeHtml(font.family)}</div></div><div class="meta">${escapeHtml(font.category)}${font.isCondensed ? " · Condensed" : ""}${font.variable ? " · Variable" : ""}</div></div>${familyActions(font)}</div>
       <div class="sample" style="${fontStyle(font, galleryStyle)}">${escapeHtml(state.previewText || " ")}</div>
       <div class="style-pills">${STYLE_DEFS.filter((style) => font.styles.includes(style.id)).map((style) => `<span class="style-pill">${escapeHtml(style.name)}</span>`).join("")}</div>
       <a class="family-page-link" href="${escapeHtml(font.familyPageUrl)}" target="_blank" rel="noopener">Открыть в Google Fonts ↗</a>
@@ -264,8 +311,86 @@ function renderGallery(fonts, visibleStyles) {
     </article>`).join("")}</div>`;
 }
 
+function renderInspector(fonts) {
+  const inspector = state.inspector;
+  const pool = fonts.length ? fonts : FONTS;
+  if (!pool.some((font) => font.family === inspector.topFamily)) inspector.topFamily = pool[0].family;
+  const topFont = fontById.get(slugify(inspector.topFamily)) || pool[0];
+  const bottomFont = fontById.get(slugify(inspector.bottomFamily)) || topFont;
+  const topIndex = Math.max(0, pool.findIndex((font) => font.family === topFont.family));
+  const bottomLayer = inspector.bottomType === "image" && inspector.imageUrl
+    ? `<img class="inspector-layer inspector-layer-image ${inspector.activeLayer === "bottom" ? "active" : ""}" data-inspector-layer="bottom" src="${escapeHtml(inspector.imageUrl)}" alt="${escapeHtml(inspector.imageName || "Нижний слой")}" style="${inspectorLayerStyle("bottom")};z-index:1">`
+    : inspector.bottomType === "font"
+      ? `<div class="inspector-layer ${inspector.activeLayer === "bottom" ? "active" : ""}" data-inspector-layer="bottom" data-font-id="${escapeHtml(bottomFont.id)}" style="${inspectorLayerStyle("bottom", bottomFont)};z-index:1">${escapeHtml(state.previewText || " ")}</div>`
+      : "";
+
+  catalog.innerHTML = `<div class="inspector-layout">
+    <section class="inspector-stage-card">
+      <div class="inspector-stage" id="inspectorStage" aria-label="Сцена сравнения слоёв">
+        ${bottomLayer}
+        <div class="inspector-layer ${inspector.activeLayer === "top" ? "active" : ""}" data-inspector-layer="top" data-font-id="${escapeHtml(topFont.id)}" style="${inspectorLayerStyle("top", topFont)};z-index:2">${escapeHtml(state.previewText || " ")}</div>
+      </div>
+      <div class="inspector-stage-help"><span>Перетаскивайте слой мышью. Стрелки — точная настройка.</span><span>Колесо мыши меняет верхний шрифт.</span></div>
+    </section>
+    <aside class="inspector-panel" aria-label="Настройки инспектора">
+      <div class="inspector-panel-head"><div class="meta">Верхний шрифт · ${topIndex + 1} из ${pool.length}</div><div class="inspector-current-font">${escapeHtml(topFont.family)}</div></div>
+      <div class="inspector-font-nav" data-inspector-swipe-fonts><button type="button" data-inspector-action="previous-font">← Предыдущий</button><button type="button" data-inspector-action="next-font">Следующий →</button></div>
+      <div class="inspector-layer-tabs">
+        <button type="button" class="${inspector.activeLayer === "top" ? "active" : ""}" data-inspector-select-layer="top">Верхний слой</button>
+        <button type="button" class="${inspector.activeLayer === "bottom" ? "active" : ""}" data-inspector-select-layer="bottom">Нижний слой</button>
+      </div>
+      <div class="inspector-controls">${inspector.activeLayer === "top" ? inspectorTopControls(topFont, pool) : inspectorBottomControls(bottomFont, pool)}</div>
+    </aside>
+    <datalist id="inspectorFonts">${pool.map((font) => `<option value="${escapeHtml(font.family)}"></option>`).join("")}</datalist>
+    <input class="is-hidden" id="inspectorImageFile" type="file" accept="image/*">
+  </div>`;
+}
+
+function inspectorTopControls(font, pool) {
+  return `${inspectorFontChooser("top", font, pool)}${inspectorLayerControls("top", true)}`;
+}
+
+function inspectorBottomControls(font, pool) {
+  const inspector = state.inspector;
+  const sourceControls = `<div class="inspector-control"><div class="inspector-control-label">Содержимое нижнего слоя</div>
+    <div class="inspector-control-row"><button class="inspector-action" type="button" data-inspector-action="bottom-from-top">Закрепить верхний шрифт</button><button class="inspector-action" type="button" data-inspector-action="upload-image">Загрузить изображение</button></div>
+    <button class="inspector-action danger" type="button" data-inspector-action="clear-bottom">Удалить изображение / нижний слой</button></div>`;
+  if (inspector.bottomType === "font") return `${sourceControls}${inspectorFontChooser("bottom", font, pool)}${inspectorLayerControls("bottom", true)}`;
+  if (inspector.bottomType === "image") return `${sourceControls}<div class="meta">Изображение: ${escapeHtml(inspector.imageName || "без названия")}</div>${inspectorLayerControls("bottom", false)}`;
+  return `${sourceControls}<div class="empty-state" style="padding:24px 12px"><strong style="font-size:15px">Нижний слой пуст</strong>Добавьте изображение или закрепите текущий верхний шрифт.</div>`;
+}
+
+function inspectorFontChooser(layer, font, pool) {
+  const key = layer === "top" ? "top" : "bottom";
+  const styleIdValue = state.inspector[`${key}Style`];
+  return `<div class="inspector-control"><label for="inspector-${key}-font">Шрифт</label><input class="control" id="inspector-${key}-font" list="inspectorFonts" value="${escapeHtml(font.family)}" data-inspector-font="${key}" autocomplete="off"></div>
+    <div class="inspector-control"><label for="inspector-${key}-style">Начертание</label><select class="control" id="inspector-${key}-style" data-inspector-setting="${key}Style">${STYLE_DEFS.filter((style) => font.styles.includes(style.id)).map((style) => `<option value="${style.id}" ${style.id === styleIdValue ? "selected" : ""}>${escapeHtml(style.name)}</option>`).join("")}</select></div>`;
+}
+
+function inspectorLayerControls(layer, isFont) {
+  const inspector = state.inspector;
+  const prefix = layer === "top" ? "top" : "bottom";
+  const blendOptions = ["normal", "multiply", "screen", "overlay", "darken", "lighten", "difference"];
+  return `${isFont ? `<div class="inspector-control-row"><div class="inspector-control"><label>Размер, pt</label><input class="inspector-number" type="number" min="6" max="300" step="1" value="${inspector[`${prefix}Size`]}" data-inspector-setting="${prefix}Size"></div><div class="inspector-control"><label>Цвет</label><input class="inspector-color" type="color" value="${inspector[`${prefix}Color`]}" data-inspector-setting="${prefix}Color"></div></div>` : ""}
+    <div class="inspector-control"><label>Масштаб, %</label><div class="inspector-scale-row"><button type="button" data-scale-change="-10" aria-label="Уменьшить масштаб">−</button><input class="inspector-number" type="number" min="10" max="1000" step="1" value="${inspector[`${prefix}Scale`]}" data-inspector-setting="${prefix}Scale"><button type="button" data-scale-change="10" aria-label="Увеличить масштаб">+</button></div></div>
+    <div class="inspector-control"><label>Прозрачность, %</label><input type="range" min="0" max="100" step="1" value="${inspector[`${prefix}Opacity`]}" data-inspector-setting="${prefix}Opacity"><output>${inspector[`${prefix}Opacity`]}%</output></div>
+    <div class="inspector-control"><label>Наложение</label><select class="control" data-inspector-setting="${prefix}Blend">${blendOptions.map((mode) => `<option value="${mode}" ${mode === inspector[`${prefix}Blend`] ? "selected" : ""}>${mode}</option>`).join("")}</select></div>
+    <div class="inspector-control-row"><div class="inspector-control"><label>X, px</label><input class="inspector-number" type="number" step="1" value="${inspector[`${prefix}X`]}" data-inspector-setting="${prefix}X"></div><div class="inspector-control"><label>Y, px</label><input class="inspector-number" type="number" step="1" value="${inspector[`${prefix}Y`]}" data-inspector-setting="${prefix}Y"></div></div>
+    <div class="inspector-control"><label>Шаг перемещения, px</label><input class="inspector-number" type="number" min="1" max="10000" step="1" value="${inspector.moveStep}" data-inspector-setting="moveStep"></div>
+    <div class="inspector-arrows" aria-label="Точная настройка позиции"><button type="button" data-nudge="up">↑</button><button type="button" data-nudge="left">←</button><button type="button" data-nudge="down">↓</button><button type="button" data-nudge="right">→</button></div>`;
+}
+
+function inspectorLayerStyle(layer, font) {
+  const inspector = state.inspector;
+  const prefix = layer === "top" ? "top" : "bottom";
+  const base = `transform:translate(${inspector[`${prefix}X`]}px,${inspector[`${prefix}Y`]}px) scale(${inspector[`${prefix}Scale`] / 100});opacity:${inspector[`${prefix}Opacity`] / 100};mix-blend-mode:${inspector[`${prefix}Blend`]}`;
+  if (!font) return base;
+  const style = STYLE_DEFS.find((item) => item.id === inspector[`${prefix}Style`]) || STYLE_DEFS[0];
+  return `${base};font-family:&quot;${escapeHtml(font.family)}&quot;,${escapeHtml(font.category)};font-size:${inspector[`${prefix}Size`]}pt;font-weight:${style.weight};font-style:${style.italic ? "italic" : "normal"};color:${inspector[`${prefix}Color`]}`;
+}
+
 function renderNameCell(font) {
-  return `<div class="font-name-cell"><div class="family-line"><div class="family-name">${escapeHtml(font.family)}</div>${familyActions(font)}</div>
+  return `<div class="font-name-cell"><div class="family-line"><div class="family-title">${rareButton(font)}<div class="family-name">${escapeHtml(font.family)}</div></div>${familyActions(font)}</div>
     <div class="meta">${escapeHtml(font.category)}${font.isCondensed ? " · Condensed" : ""}${font.variable ? " · Variable" : ""}${font.lastModified ? `<br>Обновлён: ${escapeHtml(font.lastModified)}` : ""}</div>
     <a class="family-page-link" href="${escapeHtml(font.familyPageUrl)}" target="_blank" rel="noopener">Google Fonts ↗</a>
     <div class="row-tags">${renderFontTags(font, 5)}</div></div>`;
@@ -453,6 +578,11 @@ function favoriteButton(font) {
   return `<button class="favorite ${active ? "active" : ""}" type="button" data-favorite="${escapeHtml(font.family)}" aria-label="${active ? "Убрать из избранного" : "Добавить в избранное"}" aria-pressed="${active}">${active ? "★" : "☆"}</button>`;
 }
 
+function rareButton(font) {
+  const active = state.rareFonts.has(font.family);
+  return `<button class="rare-toggle ${active ? "active" : ""}" type="button" data-rare="${escapeHtml(font.family)}" aria-label="${active ? "Убрать отметку редкого шрифта" : "Пометить как редкий и скрывать из рабочего списка"}" aria-pressed="${active}" title="${active ? "Редкий / скрытый" : "Пометить как редкий"}">${active ? "⊗" : "⊘"}</button>`;
+}
+
 function renderFontCell(font, style) {
   if (!font.styles.includes(style.id)) return `<div class="font-cell"><div class="style-top"><div class="style-label">Нет начертания</div></div><div class="missing">—</div></div>`;
   const download = font.downloads[style.id];
@@ -550,10 +680,12 @@ function syncFilterUI() {
   document.querySelectorAll("#styleFilters input").forEach((input) => { input.checked = state.visibleStyles.has(input.value); });
   document.querySelectorAll("#tagFilters [data-tag]").forEach((button) => button.classList.toggle("active", state.selectedTags.has(button.dataset.tag)));
   document.querySelectorAll("#customTagFilters [data-tag]").forEach((button) => button.classList.toggle("active", state.selectedTags.has(button.dataset.tag)));
-  document.querySelectorAll("#requireStyle option").forEach((option) => option.toggleAttribute("selected", option.value === state.requiredStyle));
+  document.querySelectorAll("#requiredStyleFilters input").forEach((input) => { input.checked = state.requiredStyles.has(input.value); });
+  const requiredNames = STYLE_DEFS.filter((style) => state.requiredStyles.has(style.id)).map((style) => style.name);
+  $("#requiredStylesSummary").textContent = requiredNames.length ? requiredNames.join(" + ") : "Любые начертания";
   $("#condensedOnly").checked = state.condensedOnly;
   $("#variableOnly").checked = state.variableOnly;
-  $("#favoritesOnly").checked = state.favoritesOnly;
+  document.querySelectorAll("#fontScope option").forEach((option) => option.toggleAttribute("selected", option.value === state.fontScope));
   document.querySelectorAll("#sortOrder option").forEach((option) => option.toggleAttribute("selected", option.value === state.sortOrder));
   searchInput.value = state.query;
 }
@@ -562,11 +694,11 @@ function resetFilters() {
   state.query = "";
   state.categories.clear();
   state.visibleStyles = new Set(STYLE_DEFS.map((style) => style.id));
-  state.requiredStyle = "";
+  state.requiredStyles.clear();
   state.selectedTags.clear();
   state.condensedOnly = false;
   state.variableOnly = false;
-  state.favoritesOnly = false;
+  state.fontScope = "working";
   state.sortOrder = "alphabetical";
   state.previewText = DEFAULT_TEXT;
   state.previewSize = 26;
@@ -591,10 +723,14 @@ function bindEvents() {
   ppiInput.addEventListener("change", () => { ppiInput.value = String(state.previewPpi); });
   $("#categoryFilters").addEventListener("change", (event) => { event.target.checked ? state.categories.add(event.target.value) : state.categories.delete(event.target.value); render(); });
   $("#styleFilters").addEventListener("change", (event) => { event.target.checked ? state.visibleStyles.add(event.target.value) : state.visibleStyles.delete(event.target.value); saveState(); render(); });
-  $("#requireStyle").addEventListener("change", (event) => { state.requiredStyle = event.target.value; render(); });
+  $("#requiredStyleFilters").addEventListener("change", (event) => {
+    event.target.checked ? state.requiredStyles.add(event.target.value) : state.requiredStyles.delete(event.target.value);
+    if (event.target.checked) state.visibleStyles.add(event.target.value);
+    syncFilterUI(); saveState(); render();
+  });
   $("#condensedOnly").addEventListener("change", (event) => { state.condensedOnly = event.target.checked; render(); });
   $("#variableOnly").addEventListener("change", (event) => { state.variableOnly = event.target.checked; render(); });
-  $("#favoritesOnly").addEventListener("change", (event) => { state.favoritesOnly = event.target.checked; render(); });
+  $("#fontScope").addEventListener("change", (event) => { state.fontScope = event.target.value; saveState(); render(); });
   $("#tagFilters").addEventListener("click", (event) => toggleTag(event.target.closest("[data-tag]")?.dataset.tag));
   $("#customTagFilters").addEventListener("click", (event) => toggleTag(event.target.closest("[data-tag]")?.dataset.tag));
   $("#exportTags").addEventListener("click", exportTagsFile);
@@ -605,16 +741,40 @@ function bindEvents() {
   });
   $("#sortOrder").addEventListener("change", (event) => { state.sortOrder = event.target.value; saveState(); render(); });
   $("#resetButton").addEventListener("click", resetFilters);
+  catalog.addEventListener("wheel", handleInspectorWheel, { passive: false });
+  catalog.addEventListener("pointerdown", startInspectorDrag);
+  catalog.addEventListener("input", handleInspectorSettingInput);
+  catalog.addEventListener("change", handleInspectorChange);
+  catalog.addEventListener("touchstart", handleInspectorFontTouchStart, { passive: true });
+  catalog.addEventListener("touchend", handleInspectorFontTouchEnd, { passive: true });
+  document.addEventListener("pointermove", moveInspectorDrag);
+  document.addEventListener("pointerup", endInspectorDrag);
 
   document.addEventListener("click", (event) => {
     const download = event.target.closest("[data-download-url]");
     if (download) { downloadFont(download); return; }
     const editTags = event.target.closest("[data-edit-tags]");
     if (editTags) { editCustomTags(editTags.dataset.editTags); return; }
+    const inspectorLayer = event.target.closest("[data-inspector-select-layer]");
+    if (inspectorLayer) { state.inspector.activeLayer = inspectorLayer.dataset.inspectorSelectLayer; render(); return; }
+    const inspectorAction = event.target.closest("[data-inspector-action]");
+    if (inspectorAction) { handleInspectorAction(inspectorAction.dataset.inspectorAction); return; }
+    const nudge = event.target.closest("[data-nudge]");
+    if (nudge) { nudgeInspectorLayer(nudge.dataset.nudge, state.inspector.moveStep * (event.shiftKey ? 10 : 1)); return; }
+    const scaleChange = event.target.closest("[data-scale-change]");
+    if (scaleChange) { changeInspectorScale(Number(scaleChange.dataset.scaleChange)); return; }
     const favorite = event.target.closest("[data-favorite]");
     if (favorite) {
       const family = favorite.dataset.favorite;
-      state.favorites.has(family) ? state.favorites.delete(family) : state.favorites.add(family);
+      if (state.favorites.has(family)) state.favorites.delete(family);
+      else { state.favorites.add(family); state.rareFonts.delete(family); }
+      saveState(); render(); return;
+    }
+    const rare = event.target.closest("[data-rare]");
+    if (rare) {
+      const family = rare.dataset.rare;
+      if (state.rareFonts.has(family)) state.rareFonts.delete(family);
+      else { state.rareFonts.add(family); state.favorites.delete(family); }
       saveState(); render(); return;
     }
     const miniTag = event.target.closest(".mini-tag[data-tag]");
@@ -630,7 +790,169 @@ function bindEvents() {
       state.visibleStyles = new Set(STYLE_DEFS.map((style) => style.id));
       syncFilterUI(); saveState(); render();
     }
+    if (event.target.closest("[data-action='clear-required-styles']")) {
+      state.requiredStyles.clear();
+      syncFilterUI(); render();
+    }
   });
+}
+
+function handleInspectorWheel(event) {
+  if (state.view !== "inspector" || !event.target.closest("#inspectorStage")) return;
+  event.preventDefault();
+  const now = Date.now();
+  if (now - lastInspectorWheelAt < 80) return;
+  lastInspectorWheelAt = now;
+  cycleInspectorFont(event.deltaY > 0 ? 1 : -1);
+}
+
+function cycleInspectorFont(direction) {
+  const pool = filteredFonts();
+  if (!pool.length) return;
+  const currentIndex = Math.max(0, pool.findIndex((font) => font.family === state.inspector.topFamily));
+  const next = pool[(currentIndex + direction + pool.length) % pool.length];
+  state.inspector.topFamily = next.family;
+  if (!next.styles.includes(state.inspector.topStyle)) state.inspector.topStyle = next.styles[0] || "regular";
+  render();
+}
+
+function handleInspectorFontTouchStart(event) {
+  if (!event.target.closest("[data-inspector-swipe-fonts]")) return;
+  inspectorTouchStartX = event.changedTouches?.[0]?.clientX ?? null;
+}
+
+function handleInspectorFontTouchEnd(event) {
+  if (inspectorTouchStartX === null || !event.target.closest("[data-inspector-swipe-fonts]")) return;
+  const endX = event.changedTouches?.[0]?.clientX;
+  if (Number.isFinite(endX) && Math.abs(endX - inspectorTouchStartX) >= 40) {
+    cycleInspectorFont(endX < inspectorTouchStartX ? 1 : -1);
+    inspectorSuppressClickUntil = Date.now() + 400;
+  }
+  inspectorTouchStartX = null;
+}
+
+function startInspectorDrag(event) {
+  if (state.view !== "inspector") return;
+  const element = event.target.closest("[data-inspector-layer]");
+  if (!element) return;
+  const layer = element.dataset.inspectorLayer;
+  const prefix = layer === "top" ? "top" : "bottom";
+  state.inspector.activeLayer = layer;
+  inspectorDrag = {
+    pointerId: event.pointerId,
+    layer,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    startX: state.inspector[`${prefix}X`],
+    startY: state.inspector[`${prefix}Y`],
+    element
+  };
+  element.setPointerCapture?.(event.pointerId);
+  element.classList.add("active");
+}
+
+function moveInspectorDrag(event) {
+  if (!inspectorDrag || event.pointerId !== inspectorDrag.pointerId) return;
+  const prefix = inspectorDrag.layer === "top" ? "top" : "bottom";
+  state.inspector[`${prefix}X`] = Math.round(inspectorDrag.startX + event.clientX - inspectorDrag.startClientX);
+  state.inspector[`${prefix}Y`] = Math.round(inspectorDrag.startY + event.clientY - inspectorDrag.startClientY);
+  applyInspectorLayerStyle(inspectorDrag.layer, inspectorDrag.element);
+}
+
+function endInspectorDrag(event) {
+  if (!inspectorDrag || event.pointerId !== inspectorDrag.pointerId) return;
+  inspectorDrag.element.releasePointerCapture?.(event.pointerId);
+  inspectorDrag = null;
+  render();
+}
+
+function handleInspectorSettingInput(event) {
+  const key = event.target.dataset.inspectorSetting;
+  if (!key) return;
+  const numeric = /(?:X|Y|Size|Scale|Opacity)$/.test(key);
+  state.inspector[key] = numeric ? Number(event.target.value) : event.target.value;
+  if (key === "moveStep") {
+    state.inspector.moveStep = Math.min(10000, Math.max(1, Math.round(Number(event.target.value) || 1)));
+    return;
+  }
+  if (key.endsWith("Scale")) state.inspector[key] = Math.min(1000, Math.max(10, Number(event.target.value) || 100));
+  const layer = key.startsWith("top") ? "top" : "bottom";
+  applyInspectorLayerStyle(layer);
+  if (key.endsWith("Opacity") && event.target.nextElementSibling) event.target.nextElementSibling.textContent = `${event.target.value}%`;
+}
+
+function handleInspectorChange(event) {
+  const fontLayer = event.target.dataset.inspectorFont;
+  if (fontLayer) {
+    const family = canonicalFamilyName(event.target.value);
+    const font = FONTS.find((item) => item.family === family);
+    if (!font) { render(); return; }
+    state.inspector[`${fontLayer}Family`] = font.family;
+    if (!font.styles.includes(state.inspector[`${fontLayer}Style`])) state.inspector[`${fontLayer}Style`] = font.styles[0] || "regular";
+    render();
+    return;
+  }
+  if (event.target.id === "inspectorImageFile") {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (state.inspector.imageUrl) URL.revokeObjectURL(state.inspector.imageUrl);
+    state.inspector.imageUrl = URL.createObjectURL(file);
+    state.inspector.imageName = file.name;
+    state.inspector.bottomType = "image";
+    state.inspector.activeLayer = "bottom";
+    render();
+    return;
+  }
+  if (event.target.dataset.inspectorSetting) render();
+}
+
+function applyInspectorLayerStyle(layer, providedElement) {
+  const element = providedElement || catalog.querySelector(`[data-inspector-layer="${layer}"]`);
+  if (!element) return;
+  const font = layer === "top"
+    ? fontById.get(slugify(state.inspector.topFamily))
+    : state.inspector.bottomType === "font" ? fontById.get(slugify(state.inspector.bottomFamily)) : null;
+  const zIndex = layer === "top" ? 2 : 1;
+  element.style.cssText = `${inspectorLayerStyle(layer, font)};z-index:${zIndex}`;
+}
+
+function handleInspectorAction(action) {
+  if (action === "previous-font") { if (Date.now() >= inspectorSuppressClickUntil) cycleInspectorFont(-1); return; }
+  if (action === "next-font") { if (Date.now() >= inspectorSuppressClickUntil) cycleInspectorFont(1); return; }
+  if (action === "bottom-from-top") {
+    state.inspector.bottomType = "font";
+    state.inspector.bottomFamily = state.inspector.topFamily;
+    state.inspector.bottomStyle = state.inspector.topStyle;
+    state.inspector.bottomSize = state.inspector.topSize;
+    state.inspector.bottomScale = state.inspector.topScale;
+    state.inspector.bottomX = state.inspector.topX + 18;
+    state.inspector.bottomY = state.inspector.topY + 18;
+    state.inspector.activeLayer = "bottom";
+  }
+  if (action === "upload-image") catalog.querySelector("#inspectorImageFile")?.click();
+  if (action === "clear-bottom") {
+    if (state.inspector.imageUrl) URL.revokeObjectURL(state.inspector.imageUrl);
+    state.inspector.imageUrl = "";
+    state.inspector.imageName = "";
+    state.inspector.bottomType = "none";
+  }
+  if (action !== "upload-image") render();
+}
+
+function nudgeInspectorLayer(direction, amount) {
+  const prefix = state.inspector.activeLayer === "top" ? "top" : "bottom";
+  if (direction === "left") state.inspector[`${prefix}X`] -= amount;
+  if (direction === "right") state.inspector[`${prefix}X`] += amount;
+  if (direction === "up") state.inspector[`${prefix}Y`] -= amount;
+  if (direction === "down") state.inspector[`${prefix}Y`] += amount;
+  render();
+}
+
+function changeInspectorScale(delta) {
+  const prefix = state.inspector.activeLayer === "top" ? "top" : "bottom";
+  const key = `${prefix}Scale`;
+  state.inspector[key] = Math.min(1000, Math.max(10, state.inspector[key] + delta));
+  render();
 }
 
 function toggleTag(tag, forceOn = false) {

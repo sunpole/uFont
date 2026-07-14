@@ -56,6 +56,12 @@
     .text-button { padding: 2px 0; border: 0; color: var(--accent); background: none; cursor: pointer; font-size: 12px; }
     .text-button:hover { text-decoration: underline; }
     .control { width: 100%; height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: white; }
+    .multi-select { position: relative; }
+    .multi-select summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; background: white; cursor: pointer; list-style: none; }
+    .multi-select summary::-webkit-details-marker { display: none; }
+    .multi-select[open] summary { border-color: #8ca397; box-shadow: 0 0 0 3px rgba(32,95,70,.1); }
+    .multi-select-panel { display: grid; position: absolute; z-index: 40; top: calc(100% + 5px); left: 0; right: 0; gap: 9px; max-height: 310px; overflow: auto; padding: 11px; border: 1px solid var(--line); border-radius: 10px; background: white; box-shadow: var(--shadow); }
+    .multi-select-clear { min-height: 32px; border: 1px solid var(--line); border-radius: 7px; color: var(--accent); background: #f7faf8; cursor: pointer; }
     .range-row { display: grid; grid-template-columns: 1fr 48px; align-items: center; gap: 10px; }
     input[type="range"] { width: 100%; accent-color: var(--accent); }
     output { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
@@ -99,7 +105,11 @@
     .header-cell:first-child { z-index: 15; background: var(--surface-2); }
     .font-name-cell { min-height: 132px; }
     .family-line { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
+    .family-title { display: flex; min-width: 0; align-items: flex-start; gap: 5px; }
     .family-name { overflow-wrap: anywhere; font-size: 19px; font-weight: 750; line-height: 1.12; letter-spacing: -.025em; }
+    .rare-toggle { flex: none; width: 28px; height: 28px; margin: -4px 0 0 -5px; border: 0; border-radius: 50%; color: #a2a69f; background: transparent; cursor: pointer; font-size: 18px; line-height: 1; }
+    .rare-toggle:hover { color: var(--danger); background: #fae9e7; }
+    .rare-toggle.active { color: #fff; background: var(--danger); }
     .favorite { flex: none; width: 30px; height: 30px; border: 0; border-radius: 50%; color: #a2a69f; background: transparent; cursor: pointer; font-size: 20px; line-height: 1; }
     .favorite:hover { color: #c78418; background: #fff4dd; }
     .favorite.active { color: #c78418; }
@@ -135,6 +145,40 @@
     .style-pill { padding: 4px 8px; border-radius: 7px; color: var(--muted); background: var(--surface-2); font-size: 11px; }
     .empty-state { padding: 70px 20px; border: 1px dashed #c8ccc6; border-radius: var(--radius); color: var(--muted); background: rgba(255,255,255,.6); text-align: center; }
     .empty-state strong { display: block; margin-bottom: 6px; color: var(--ink); font-size: 20px; }
+    .inspector-layout { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 16px; align-items: start; }
+    .inspector-stage-card, .inspector-panel { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+    .inspector-stage-card { min-width: 0; padding: 14px; }
+    .inspector-stage { position: relative; min-height: 520px; overflow: hidden; border-radius: 10px; background-color: #eceeea; background-image: linear-gradient(45deg, #e3e5e1 25%, transparent 25%), linear-gradient(-45deg, #e3e5e1 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e3e5e1 75%), linear-gradient(-45deg, transparent 75%, #e3e5e1 75%); background-position: 0 0, 0 10px, 10px -10px, -10px 0; background-size: 20px 20px; touch-action: none; user-select: none; }
+    .inspector-layer { position: absolute; left: 0; top: 0; max-width: none; cursor: move; transform-origin: top left; white-space: pre-wrap; overflow-wrap: normal; line-height: 1.05; }
+    .inspector-layer.active { outline: 1px dashed rgba(32,95,70,.65); outline-offset: 5px; }
+    .inspector-layer-image { width: auto; height: auto; max-width: 88%; max-height: 88%; object-fit: contain; }
+    .inspector-stage-help { display: flex; justify-content: space-between; gap: 12px; margin-top: 10px; color: var(--muted); font-size: 11px; }
+    .inspector-panel { overflow: hidden; }
+    .inspector-panel-head { padding: 14px; border-bottom: 1px solid var(--line); }
+    .inspector-current-font { margin-top: 4px; font-size: 18px; font-weight: 750; }
+    .inspector-layer-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px 12px 0; }
+    .inspector-layer-tabs button { min-height: 34px; border: 1px solid var(--line); border-radius: 8px; background: white; cursor: pointer; }
+    .inspector-layer-tabs button.active { color: white; border-color: var(--accent); background: var(--accent); }
+    .inspector-controls { display: grid; gap: 12px; padding: 14px; }
+    .inspector-control { display: grid; gap: 5px; }
+    .inspector-control > label, .inspector-control-label { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+    .inspector-control-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .inspector-number { width: 100%; height: 36px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; }
+    .inspector-scale-row { display: grid; grid-template-columns: 44px 1fr 44px; gap: 6px; }
+    .inspector-scale-row button { min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: white; cursor: pointer; font-size: 20px; }
+    .inspector-arrows { display: grid; grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(2, 44px); justify-content: center; gap: 6px; }
+    .inspector-arrows button { border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; }
+    .inspector-arrows [data-nudge="up"] { grid-column: 2; }
+    .inspector-arrows [data-nudge="left"] { grid-column: 1; grid-row: 2; }
+    .inspector-arrows [data-nudge="down"] { grid-column: 2; grid-row: 2; }
+    .inspector-arrows [data-nudge="right"] { grid-column: 3; grid-row: 2; }
+    .inspector-action { min-height: 37px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); background: white; cursor: pointer; }
+    .inspector-action:hover { background: #f4f8f5; }
+    .inspector-action.danger { color: var(--danger); }
+    .inspector-font-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 14px 12px; touch-action: pan-y; }
+    .inspector-font-nav button { min-height: 46px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 9px; color: var(--accent); background: white; cursor: pointer; }
+    .inspector-font-nav button:active { background: var(--accent-soft); }
+    .inspector-color { width: 100%; height: 38px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: white; }
     .is-hidden { display: none !important; }
 
     @media (max-width: 900px) {
@@ -146,6 +190,7 @@
       .content { padding: 16px 12px 36px; }
       .font-table-scroll { max-height: none; }
       .header-row { top: 0; }
+      .inspector-layout { grid-template-columns: 1fr; }
     }
     @media (max-width: 560px) {
       :root { --name-width: 165px; --cell-width: 165px; }
@@ -156,6 +201,8 @@
       .segmented { width: 100%; }
       .segmented button { flex: 1; }
       .gallery { grid-template-columns: 1fr; }
+      .inspector-stage { min-height: 420px; }
+      .inspector-font-nav button { min-height: 52px; font-size: 13px; }
       .font-name-cell { min-height: 122px; }
       .font-cell { min-height: 122px; }
     }
@@ -186,10 +233,14 @@
         </section>
 
         <section class="sidebar-section">
-          <h2 class="section-title">Семейство содержит</h2>
-          <select class="control" id="requireStyle">
-            <option value="">Любые начертания</option>
-          </select>
+          <h2 class="section-title">Семейство содержит <button class="text-button" type="button" data-action="clear-required-styles">Сбросить</button></h2>
+          <details class="multi-select" id="requiredStylesMenu">
+            <summary><span id="requiredStylesSummary">Любые начертания</span><span aria-hidden="true">⌄</span></summary>
+            <div class="multi-select-panel">
+              <div class="check-list" id="requiredStyleFilters"></div>
+              <button class="multi-select-clear" type="button" data-action="clear-required-styles">Очистить выбор</button>
+            </div>
+          </details>
         </section>
 
         <section class="sidebar-section">
@@ -213,8 +264,15 @@
           <div class="check-list">
             <label class="check"><input id="condensedOnly" type="checkbox"> Только Condensed / Narrow</label>
             <label class="check"><input id="variableOnly" type="checkbox"> Только variable</label>
-            <label class="check"><input id="favoritesOnly" type="checkbox"> Только избранные</label>
           </div>
+          <label class="is-hidden" for="fontScope">Какие шрифты показывать</label>
+          <select class="control" id="fontScope" style="margin-top:12px">
+            <option value="working">Рабочие — без редких</option>
+            <option value="all">Все шрифты</option>
+            <option value="favorites">Только избранные</option>
+            <option value="rare">Только редкие</option>
+            <option value="marked">Избранные + редкие</option>
+          </select>
           <label class="is-hidden" for="sortOrder">Сортировка</label>
           <select class="control" id="sortOrder" style="margin-top:12px">
             <option value="alphabetical">По алфавиту</option>
@@ -247,6 +305,7 @@
           <div class="segmented" aria-label="Режим отображения">
             <button class="active" type="button" data-view="table">Таблица</button>
             <button type="button" data-view="gallery">Галерея</button>
+            <button type="button" data-view="inspector">Инспектор</button>
           </div>
           <button class="reset-button" id="resetButton" type="button">Сбросить всё</button>
         </div>
