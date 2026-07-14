@@ -34,6 +34,8 @@ let fontById = new Map();
 let categories = [];
 let filterTags = [];
 let lazyFontObserver;
+let portableStateReady = false;
+let portableSaveTimer;
 const loadedFontFamilies = new Set();
 
 const state = {
@@ -193,28 +195,14 @@ function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (!saved) return;
-    state.visibleStyles = new Set((saved.visibleStyles || []).filter((id) => STYLE_DEFS.some((style) => style.id === id)));
-    if (!state.visibleStyles.size) state.visibleStyles.add("regular");
-    state.favorites = new Set(saved.favorites || []);
-    state.rareFonts = new Set(saved.rareFonts || []);
-    state.fontScope = ["working", "all", "favorites", "rare", "marked"].includes(saved.fontScope) ? saved.fontScope : "working";
-    state.sortOrder = ["alphabetical", "custom-tags", "condensed", "favorites"].includes(saved.sortOrder) ? saved.sortOrder : "alphabetical";
-    state.previewText = typeof saved.previewText === "string" ? saved.previewText : DEFAULT_TEXT;
-    const savedSize = Number(saved.previewSize);
-    const sizeInPoints = saved.previewUnit === "pt" ? savedSize : Math.round(savedSize * 0.75);
-    state.previewSize = Math.min(72, Math.max(8, sizeInPoints || 26));
-    state.previewPpi = Math.min(2400, Math.max(72, Number(saved.previewPpi) || 300));
-    state.view = ["table", "gallery", "inspector", "tags"].includes(saved.view) ? saved.view : "table";
-    state.tagSort = saved.tagSort === "desc" ? "desc" : "asc";
-    state.invertTagFilter = Boolean(saved.invertTagFilter);
-    state.tagScale = Math.min(200, Math.max(50, Number(saved.tagScale) || 100));
+    applyPortablePreferences(saved);
   } catch {
     localStorage.removeItem(STORAGE_KEY);
   }
 }
 
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+function localStateObject() {
+  return {
     visibleStyles: [...state.visibleStyles],
     favorites: [...state.favorites],
     rareFonts: [...state.rareFonts],
@@ -227,8 +215,95 @@ function saveState() {
     view: state.view,
     tagSort: state.tagSort,
     invertTagFilter: state.invertTagFilter,
-    tagScale: state.tagScale
-  }));
+    tagScale: state.tagScale,
+    query: state.query,
+    categories: [...state.categories],
+    requiredStyles: [...state.requiredStyles],
+    selectedTags: [...state.selectedTags],
+    condensedOnly: state.condensedOnly,
+    variableOnly: state.variableOnly,
+    inspector: portableInspectorObject()
+  };
+}
+
+function portableInspectorObject() {
+  const source = state.inspector;
+  const keys = ["activeLayer", "moveStep", "topFamily", "topStyle", "topX", "topY", "topSize", "topScale", "topOpacity", "topColor", "topBlend", "bottomFamily", "bottomStyle", "bottomX", "bottomY", "bottomSize", "bottomScale", "bottomOpacity", "bottomColor", "bottomBlend"];
+  const output = Object.fromEntries(keys.map((key) => [key, source[key]]));
+  output.bottomType = source.bottomType === "font" ? "font" : "none";
+  return output;
+}
+
+function portablePreferencesObject() {
+  return localStateObject();
+}
+
+function applyPortablePreferences(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return;
+  const styleIds = new Set(STYLE_DEFS.map((style) => style.id));
+  const visibleStyles = cleanStringArray(input.visibleStyles, 8, 30).filter((id) => styleIds.has(id));
+  if (visibleStyles.length) state.visibleStyles = new Set(visibleStyles);
+  state.favorites = new Set(cleanStringArray(input.favorites, 3000, 160));
+  state.rareFonts = new Set(cleanStringArray(input.rareFonts, 3000, 160));
+  state.categories = new Set(cleanStringArray(input.categories, 20, 60));
+  state.requiredStyles = new Set(cleanStringArray(input.requiredStyles, 8, 30).filter((id) => styleIds.has(id)));
+  state.selectedTags = new Set(cleanStringArray(input.selectedTags, 99, 60));
+  state.fontScope = ["working", "all", "favorites", "rare", "marked"].includes(input.fontScope) ? input.fontScope : state.fontScope;
+  state.sortOrder = ["alphabetical", "custom-tags", "condensed", "favorites"].includes(input.sortOrder) ? input.sortOrder : state.sortOrder;
+  state.previewText = typeof input.previewText === "string" ? input.previewText.slice(0, 160) : state.previewText;
+  const savedSize = Number(input.previewSize);
+  const sizeInPoints = input.previewUnit === "pt" || !input.previewUnit ? savedSize : Math.round(savedSize * 0.75);
+  state.previewSize = clampNumber(sizeInPoints, 8, 72, state.previewSize);
+  state.previewPpi = clampNumber(input.previewPpi, 72, 2400, state.previewPpi);
+  state.view = ["table", "gallery", "inspector", "tags"].includes(input.view) ? input.view : state.view;
+  state.tagSort = input.tagSort === "desc" ? "desc" : "asc";
+  state.invertTagFilter = Boolean(input.invertTagFilter);
+  state.tagScale = clampNumber(input.tagScale, 50, 200, state.tagScale);
+  state.query = typeof input.query === "string" ? input.query.slice(0, 160) : state.query;
+  state.condensedOnly = Boolean(input.condensedOnly);
+  state.variableOnly = Boolean(input.variableOnly);
+  applyPortableInspector(input.inspector);
+}
+
+function applyPortableInspector(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return;
+  const numericLimits = {
+    moveStep: [1, 10000], topX: [-100000, 100000], topY: [-100000, 100000], bottomX: [-100000, 100000], bottomY: [-100000, 100000],
+    topSize: [6, 300], bottomSize: [6, 300], topScale: [10, 1000], bottomScale: [10, 1000], topOpacity: [0, 100], bottomOpacity: [0, 100]
+  };
+  for (const [key, [min, max]] of Object.entries(numericLimits)) state.inspector[key] = clampNumber(input[key], min, max, state.inspector[key]);
+  for (const key of ["topFamily", "bottomFamily"]) if (typeof input[key] === "string") state.inspector[key] = input[key].slice(0, 160);
+  for (const key of ["topStyle", "bottomStyle"]) if (STYLE_DEFS.some((style) => style.id === input[key])) state.inspector[key] = input[key];
+  for (const key of ["topColor", "bottomColor"]) if (/^#[0-9a-f]{6}$/i.test(String(input[key] || ""))) state.inspector[key] = String(input[key]).toLowerCase();
+  const blends = ["normal", "multiply", "screen", "overlay", "darken", "lighten", "difference"];
+  for (const key of ["topBlend", "bottomBlend"]) if (blends.includes(input[key])) state.inspector[key] = input[key];
+  state.inspector.activeLayer = input.activeLayer === "bottom" ? "bottom" : "top";
+  state.inspector.bottomType = input.bottomType === "font" ? "font" : "none";
+  state.inspector.imageUrl = "";
+  state.inspector.imageName = "";
+}
+
+function cleanStringArray(value, limit, maxLength) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => String(item).trim()).filter(Boolean))].slice(0, limit).map((item) => item.slice(0, maxLength));
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(localStateObject()));
+  schedulePortableStateSave();
+}
+
+function schedulePortableStateSave() {
+  if (!portableStateReady) return;
+  clearTimeout(portableSaveTimer);
+  portableSaveTimer = setTimeout(() => {
+    saveTagsToCurrentStore().catch((error) => console.warn("uFont: не удалось сохранить переносимый профиль", error));
+  }, 500);
 }
 
 function buildControls() {
@@ -463,16 +538,20 @@ async function loadCentralTags() {
 
   state.customTags = normalizeTagDatabase(database?.families);
   state.tagMeta = normalizeTagMeta(database?.tagMeta);
+  applyPortablePreferences(database?.preferences);
   if (!state.tagStoreWritable) {
     try {
       const draft = JSON.parse(localStorage.getItem(TAG_DRAFT_STORAGE_KEY));
       state.customTags = mergeTagMaps(state.customTags, normalizeTagDatabase(draft?.families));
       state.tagMeta = mergeTagMeta(state.tagMeta, normalizeTagMeta(draft?.tagMeta));
+      applyPortablePreferences(draft?.preferences);
     } catch {
       localStorage.removeItem(TAG_DRAFT_STORAGE_KEY);
     }
   }
   state.tagStoreUpdatedAt = database?.updatedAt || null;
+  portableStateReady = true;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(localStateObject()));
   updateTagStoreStatus();
 }
 
@@ -480,8 +559,8 @@ function updateTagStoreStatus() {
   const status = $("#tagStoreStatus");
   if (!status) return;
   status.textContent = state.tagStoreWritable
-    ? "Редактирование включено: изменения записываются в data/user-tags.json."
-    : "Статический режим: изменения сохраняются как черновик в браузере. Экспортируйте JSON для переноса на рабочий ПК.";
+    ? "Синхронизация включена: теги, цвета и настройки записываются в data/user-tags.json."
+    : "Статический режим: теги, цвета и настройки сохраняются как черновик в браузере. Экспортируйте JSON для переноса.";
 }
 
 function normalizeTagDatabase(families) {
@@ -530,10 +609,11 @@ function mergeTagMaps(base, incoming) {
 
 function tagDatabaseObject() {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     updatedAt: new Date().toISOString(),
     families: Object.fromEntries([...state.customTags].sort(([a], [b]) => a.localeCompare(b, "ru"))),
-    tagMeta: Object.fromEntries([...state.tagMeta].sort(([a], [b]) => a.localeCompare(b, "ru")))
+    tagMeta: Object.fromEntries([...state.tagMeta].sort(([a], [b]) => a.localeCompare(b, "ru"))),
+    preferences: portablePreferencesObject()
   };
 }
 
@@ -572,16 +652,19 @@ async function importTagsFile(file) {
     const database = JSON.parse(await file.text());
     const incoming = normalizeTagDatabase(database?.families);
     const incomingMeta = normalizeTagMeta(database?.tagMeta);
-    if (!incoming.size && !incomingMeta.size) throw new Error("В файле нет пользовательских тегов.");
+    const hasPreferences = database?.preferences && typeof database.preferences === "object" && !Array.isArray(database.preferences);
+    if (!incoming.size && !incomingMeta.size && !hasPreferences) throw new Error("В файле нет тегов или переносимых настроек.");
     const before = countAssignedTags(state.customTags);
     state.customTags = mergeTagMaps(state.customTags, incoming);
     state.tagMeta = mergeTagMeta(state.tagMeta, incomingMeta);
+    if (hasPreferences) applyPortablePreferences(database.preferences);
     const added = countAssignedTags(state.customTags) - before;
     await saveTagsToCurrentStore();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(localStateObject()));
     renderCustomTagFilters();
     syncFilterUI();
     render();
-    window.alert(`Импорт завершён. Добавлено новых связей «шрифт — тег»: ${added}. Дубли пропущены.`);
+    window.alert(`Импорт завершён. Добавлено связей «шрифт — тег»: ${added}. Теги, цвета и настройки профиля восстановлены; дубли пропущены.`);
   } catch (error) {
     window.alert(`Не удалось импортировать теги: ${error.message}`);
   }
@@ -867,21 +950,21 @@ function resetFilters() {
 }
 
 function bindEvents() {
-  searchInput.addEventListener("input", (event) => { state.query = event.target.value; render(); });
-  $("#clearSearch").addEventListener("click", () => { state.query = ""; searchInput.value = ""; searchInput.focus(); render(); });
+  searchInput.addEventListener("input", (event) => { state.query = event.target.value; saveState(); render(); });
+  $("#clearSearch").addEventListener("click", () => { state.query = ""; searchInput.value = ""; searchInput.focus(); saveState(); render(); });
   previewInput.addEventListener("input", (event) => { state.previewText = event.target.value; saveState(); render(); });
   sizeRange.addEventListener("input", () => { updateSize(); saveState(); });
   ppiInput.addEventListener("input", () => { updateSize(); saveState(); });
   ppiInput.addEventListener("change", () => { ppiInput.value = String(state.previewPpi); });
-  $("#categoryFilters").addEventListener("change", (event) => { event.target.checked ? state.categories.add(event.target.value) : state.categories.delete(event.target.value); render(); });
+  $("#categoryFilters").addEventListener("change", (event) => { event.target.checked ? state.categories.add(event.target.value) : state.categories.delete(event.target.value); saveState(); render(); });
   $("#styleFilters").addEventListener("change", (event) => { event.target.checked ? state.visibleStyles.add(event.target.value) : state.visibleStyles.delete(event.target.value); saveState(); render(); });
   $("#requiredStyleFilters").addEventListener("change", (event) => {
     event.target.checked ? state.requiredStyles.add(event.target.value) : state.requiredStyles.delete(event.target.value);
     if (event.target.checked) state.visibleStyles.add(event.target.value);
     syncFilterUI(); saveState(); render();
   });
-  $("#condensedOnly").addEventListener("change", (event) => { state.condensedOnly = event.target.checked; render(); });
-  $("#variableOnly").addEventListener("change", (event) => { state.variableOnly = event.target.checked; render(); });
+  $("#condensedOnly").addEventListener("change", (event) => { state.condensedOnly = event.target.checked; saveState(); render(); });
+  $("#variableOnly").addEventListener("change", (event) => { state.variableOnly = event.target.checked; saveState(); render(); });
   $("#fontScope").addEventListener("change", (event) => { state.fontScope = event.target.value; saveState(); render(); });
   $("#tagFilters").addEventListener("click", (event) => toggleTag(event.target.closest("[data-tag]")?.dataset.tag));
   $("#customTagFilters").addEventListener("click", (event) => toggleTag(event.target.closest("[data-tag]")?.dataset.tag));
@@ -924,7 +1007,7 @@ function bindEvents() {
     const deleteTag = event.target.closest("[data-tag-delete]");
     if (deleteTag) { deleteManagedTag(deleteTag.dataset.tagDelete); return; }
     const inspectorLayer = event.target.closest("[data-inspector-select-layer]");
-    if (inspectorLayer) { state.inspector.activeLayer = inspectorLayer.dataset.inspectorSelectLayer; render(); return; }
+    if (inspectorLayer) { state.inspector.activeLayer = inspectorLayer.dataset.inspectorSelectLayer; saveState(); render(); return; }
     const inspectorAction = event.target.closest("[data-inspector-action]");
     if (inspectorAction) { handleInspectorAction(inspectorAction.dataset.inspectorAction); return; }
     const nudge = event.target.closest("[data-nudge]");
@@ -953,14 +1036,14 @@ function bindEvents() {
     if (clearButton?.dataset.clear === "categories") state.categories.clear();
     if (clearButton?.dataset.clear === "tags") state.selectedTags.clear();
     if (clearButton?.dataset.clear === "custom-tags") state.selectedTags.clear();
-    if (clearButton) { syncFilterUI(); render(); return; }
+    if (clearButton) { syncFilterUI(); saveState(); render(); return; }
     if (event.target.closest("[data-action='all-styles']")) {
       state.visibleStyles = new Set(STYLE_DEFS.map((style) => style.id));
       syncFilterUI(); saveState(); render();
     }
     if (event.target.closest("[data-action='clear-required-styles']")) {
       state.requiredStyles.clear();
-      syncFilterUI(); render();
+      syncFilterUI(); saveState(); render();
     }
   });
 
@@ -988,6 +1071,7 @@ function cycleInspectorFont(direction) {
   const next = pool[(currentIndex + direction + pool.length) % pool.length];
   state.inspector.topFamily = next.family;
   if (!next.styles.includes(state.inspector.topStyle)) state.inspector.topStyle = next.styles[0] || "regular";
+  saveState();
   render();
 }
 
@@ -1038,6 +1122,7 @@ function endInspectorDrag(event) {
   if (!inspectorDrag || event.pointerId !== inspectorDrag.pointerId) return;
   inspectorDrag.element.releasePointerCapture?.(event.pointerId);
   inspectorDrag = null;
+  saveState();
   render();
 }
 
@@ -1048,12 +1133,14 @@ function handleInspectorSettingInput(event) {
   state.inspector[key] = numeric ? Number(event.target.value) : event.target.value;
   if (key === "moveStep") {
     state.inspector.moveStep = Math.min(10000, Math.max(1, Math.round(Number(event.target.value) || 1)));
+    saveState();
     return;
   }
   if (key.endsWith("Scale")) state.inspector[key] = Math.min(1000, Math.max(10, Number(event.target.value) || 100));
   const layer = key.startsWith("top") ? "top" : "bottom";
   applyInspectorLayerStyle(layer);
   if (key.endsWith("Opacity") && event.target.nextElementSibling) event.target.nextElementSibling.textContent = `${event.target.value}%`;
+  saveState();
 }
 
 function handleInspectorChange(event) {
@@ -1071,6 +1158,7 @@ function handleInspectorChange(event) {
     }
     state.inspector[`${fontLayer}Family`] = font.family;
     if (!font.styles.includes(state.inspector[`${fontLayer}Style`])) state.inspector[`${fontLayer}Style`] = font.styles[0] || "regular";
+    saveState();
     render();
     return;
   }
@@ -1082,10 +1170,11 @@ function handleInspectorChange(event) {
     state.inspector.imageName = file.name;
     state.inspector.bottomType = "image";
     state.inspector.activeLayer = "bottom";
+    saveState();
     render();
     return;
   }
-  if (event.target.dataset.inspectorSetting) render();
+  if (event.target.dataset.inspectorSetting) { saveState(); render(); }
 }
 
 function applyInspectorLayerStyle(layer, providedElement) {
@@ -1118,7 +1207,7 @@ function handleInspectorAction(action) {
     state.inspector.imageName = "";
     state.inspector.bottomType = "none";
   }
-  if (action !== "upload-image") render();
+  if (action !== "upload-image") { saveState(); render(); }
 }
 
 function nudgeInspectorLayer(direction, amount) {
@@ -1127,6 +1216,7 @@ function nudgeInspectorLayer(direction, amount) {
   if (direction === "right") state.inspector[`${prefix}X`] += amount;
   if (direction === "up") state.inspector[`${prefix}Y`] -= amount;
   if (direction === "down") state.inspector[`${prefix}Y`] += amount;
+  saveState();
   render();
 }
 
@@ -1134,6 +1224,7 @@ function changeInspectorScale(delta) {
   const prefix = state.inspector.activeLayer === "top" ? "top" : "bottom";
   const key = `${prefix}Scale`;
   state.inspector[key] = Math.min(1000, Math.max(10, state.inspector[key] + delta));
+  saveState();
   render();
 }
 
@@ -1142,6 +1233,7 @@ function toggleTag(tag, forceOn = false) {
   if (forceOn) state.selectedTags.add(tag);
   else state.selectedTags.has(tag) ? state.selectedTags.delete(tag) : state.selectedTags.add(tag);
   syncFilterUI();
+  saveState();
   render();
 }
 
