@@ -135,6 +135,35 @@
     .style-pill { padding: 4px 8px; border-radius: 7px; color: var(--muted); background: var(--surface-2); font-size: 11px; }
     .empty-state { padding: 70px 20px; border: 1px dashed #c8ccc6; border-radius: var(--radius); color: var(--muted); background: rgba(255,255,255,.6); text-align: center; }
     .empty-state strong { display: block; margin-bottom: 6px; color: var(--ink); font-size: 20px; }
+    .inspector-layout { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 16px; align-items: start; }
+    .inspector-stage-card, .inspector-panel { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+    .inspector-stage-card { min-width: 0; padding: 14px; }
+    .inspector-stage { position: relative; min-height: 520px; overflow: hidden; border-radius: 10px; background-color: #eceeea; background-image: linear-gradient(45deg, #e3e5e1 25%, transparent 25%), linear-gradient(-45deg, #e3e5e1 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e3e5e1 75%), linear-gradient(-45deg, transparent 75%, #e3e5e1 75%); background-position: 0 0, 0 10px, 10px -10px, -10px 0; background-size: 20px 20px; touch-action: none; user-select: none; }
+    .inspector-layer { position: absolute; left: 0; top: 0; max-width: none; cursor: move; transform-origin: top left; white-space: pre-wrap; overflow-wrap: normal; line-height: 1.05; }
+    .inspector-layer.active { outline: 1px dashed rgba(32,95,70,.65); outline-offset: 5px; }
+    .inspector-layer-image { width: auto; height: auto; max-width: 88%; max-height: 88%; object-fit: contain; }
+    .inspector-stage-help { display: flex; justify-content: space-between; gap: 12px; margin-top: 10px; color: var(--muted); font-size: 11px; }
+    .inspector-panel { overflow: hidden; }
+    .inspector-panel-head { padding: 14px; border-bottom: 1px solid var(--line); }
+    .inspector-current-font { margin-top: 4px; font-size: 18px; font-weight: 750; }
+    .inspector-layer-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px 12px 0; }
+    .inspector-layer-tabs button { min-height: 34px; border: 1px solid var(--line); border-radius: 8px; background: white; cursor: pointer; }
+    .inspector-layer-tabs button.active { color: white; border-color: var(--accent); background: var(--accent); }
+    .inspector-controls { display: grid; gap: 12px; padding: 14px; }
+    .inspector-control { display: grid; gap: 5px; }
+    .inspector-control > label, .inspector-control-label { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+    .inspector-control-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .inspector-number { width: 100%; height: 36px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; }
+    .inspector-arrows { display: grid; grid-template-columns: repeat(3, 36px); grid-template-rows: repeat(2, 32px); justify-content: center; gap: 4px; }
+    .inspector-arrows button { border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; }
+    .inspector-arrows [data-nudge="up"] { grid-column: 2; }
+    .inspector-arrows [data-nudge="left"] { grid-column: 1; grid-row: 2; }
+    .inspector-arrows [data-nudge="down"] { grid-column: 2; grid-row: 2; }
+    .inspector-arrows [data-nudge="right"] { grid-column: 3; grid-row: 2; }
+    .inspector-action { min-height: 37px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); background: white; cursor: pointer; }
+    .inspector-action:hover { background: #f4f8f5; }
+    .inspector-action.danger { color: var(--danger); }
+    .inspector-color { width: 100%; height: 38px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: white; }
     .is-hidden { display: none !important; }
 
     @media (max-width: 900px) {
@@ -146,6 +175,7 @@
       .content { padding: 16px 12px 36px; }
       .font-table-scroll { max-height: none; }
       .header-row { top: 0; }
+      .inspector-layout { grid-template-columns: 1fr; }
     }
     @media (max-width: 560px) {
       :root { --name-width: 165px; --cell-width: 165px; }
@@ -156,6 +186,7 @@
       .segmented { width: 100%; }
       .segmented button { flex: 1; }
       .gallery { grid-template-columns: 1fr; }
+      .inspector-stage { min-height: 420px; }
       .font-name-cell { min-height: 122px; }
       .font-cell { min-height: 122px; }
     }
@@ -247,6 +278,7 @@
           <div class="segmented" aria-label="Режим отображения">
             <button class="active" type="button" data-view="table">Таблица</button>
             <button type="button" data-view="gallery">Галерея</button>
+            <button type="button" data-view="inspector">Инспектор</button>
           </div>
           <button class="reset-button" id="resetButton" type="button">Сбросить всё</button>
         </div>
