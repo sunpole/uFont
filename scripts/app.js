@@ -40,16 +40,17 @@ const state = {
   query: "",
   categories: new Set(),
   visibleStyles: new Set(STYLE_DEFS.map((style) => style.id)),
-  requiredStyle: "",
+  requiredStyles: new Set(),
   selectedTags: new Set(),
   customTags: new Map(),
   tagStoreWritable: false,
   tagStoreUpdatedAt: null,
   condensedOnly: false,
   variableOnly: false,
-  favoritesOnly: false,
+  fontScope: "working",
   sortOrder: "alphabetical",
   favorites: new Set(),
+  rareFonts: new Set(),
   previewText: DEFAULT_TEXT,
   previewSize: 26,
   previewPpi: 300,
@@ -190,6 +191,8 @@ function loadState() {
     state.visibleStyles = new Set((saved.visibleStyles || []).filter((id) => STYLE_DEFS.some((style) => style.id === id)));
     if (!state.visibleStyles.size) state.visibleStyles.add("regular");
     state.favorites = new Set(saved.favorites || []);
+    state.rareFonts = new Set(saved.rareFonts || []);
+    state.fontScope = ["working", "all", "favorites", "rare", "marked"].includes(saved.fontScope) ? saved.fontScope : "working";
     state.sortOrder = ["alphabetical", "custom-tags", "condensed", "favorites"].includes(saved.sortOrder) ? saved.sortOrder : "alphabetical";
     state.previewText = typeof saved.previewText === "string" ? saved.previewText : DEFAULT_TEXT;
     const savedSize = Number(saved.previewSize);
@@ -206,6 +209,8 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     visibleStyles: [...state.visibleStyles],
     favorites: [...state.favorites],
+    rareFonts: [...state.rareFonts],
+    fontScope: state.fontScope,
     sortOrder: state.sortOrder,
     previewText: state.previewText,
     previewSize: state.previewSize,
@@ -222,7 +227,9 @@ function buildControls() {
   $("#styleFilters").innerHTML = STYLE_DEFS.map((style) => `
     <label class="check"><input type="checkbox" value="${style.id}" ${state.visibleStyles.has(style.id) ? "checked" : ""}> ${escapeHtml(style.name)}</label>
   `).join("");
-  $("#requireStyle").innerHTML = `<option value="">Любые начертания</option>${STYLE_DEFS.map((style) => `<option value="${style.id}">${escapeHtml(style.name)}</option>`).join("")}`;
+  $("#requiredStyleFilters").innerHTML = STYLE_DEFS.map((style) => `
+    <label class="check"><input type="checkbox" value="${style.id}"> ${escapeHtml(style.name)}</label>
+  `).join("");
   $("#tagFilters").innerHTML = filterTags.map((tag) => `<button class="tag-button" type="button" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`).join("");
   renderCustomTagFilters();
   previewInput.value = state.previewText;
@@ -240,11 +247,16 @@ function filteredFonts() {
     const haystack = [font.family, font.category, ...tags].join(" ").toLocaleLowerCase("ru");
     if (query && !haystack.includes(query)) return false;
     if (state.categories.size && !state.categories.has(font.category)) return false;
-    if (state.requiredStyle && !font.styles.includes(state.requiredStyle)) return false;
+    if (state.requiredStyles.size && [...state.requiredStyles].some((style) => !font.styles.includes(style))) return false;
     if (state.selectedTags.size && [...state.selectedTags].some((tag) => !tags.includes(tag))) return false;
     if (state.condensedOnly && !font.isCondensed) return false;
     if (state.variableOnly && !font.variable) return false;
-    if (state.favoritesOnly && !state.favorites.has(font.family)) return false;
+    const isFavorite = state.favorites.has(font.family);
+    const isRare = state.rareFonts.has(font.family);
+    if (state.fontScope === "working" && isRare) return false;
+    if (state.fontScope === "favorites" && !isFavorite) return false;
+    if (state.fontScope === "rare" && !isRare) return false;
+    if (state.fontScope === "marked" && !isFavorite && !isRare) return false;
     return true;
   }).sort(compareFonts);
 }
@@ -291,7 +303,7 @@ function renderGallery(fonts, visibleStyles) {
   const galleryStyle = visibleStyles[0] || STYLE_DEFS[0];
   catalog.innerHTML = `<div class="gallery">${fonts.map((font) => `
     <article class="gallery-card" data-font-id="${escapeHtml(font.id)}">
-      <div class="family-line"><div><div class="family-name">${escapeHtml(font.family)}</div><div class="meta">${escapeHtml(font.category)}${font.isCondensed ? " · Condensed" : ""}${font.variable ? " · Variable" : ""}</div></div>${familyActions(font)}</div>
+      <div class="family-line"><div><div class="family-title">${rareButton(font)}<div class="family-name">${escapeHtml(font.family)}</div></div><div class="meta">${escapeHtml(font.category)}${font.isCondensed ? " · Condensed" : ""}${font.variable ? " · Variable" : ""}</div></div>${familyActions(font)}</div>
       <div class="sample" style="${fontStyle(font, galleryStyle)}">${escapeHtml(state.previewText || " ")}</div>
       <div class="style-pills">${STYLE_DEFS.filter((style) => font.styles.includes(style.id)).map((style) => `<span class="style-pill">${escapeHtml(style.name)}</span>`).join("")}</div>
       <a class="family-page-link" href="${escapeHtml(font.familyPageUrl)}" target="_blank" rel="noopener">Открыть в Google Fonts ↗</a>
@@ -378,7 +390,7 @@ function inspectorLayerStyle(layer, font) {
 }
 
 function renderNameCell(font) {
-  return `<div class="font-name-cell"><div class="family-line"><div class="family-name">${escapeHtml(font.family)}</div>${familyActions(font)}</div>
+  return `<div class="font-name-cell"><div class="family-line"><div class="family-title">${rareButton(font)}<div class="family-name">${escapeHtml(font.family)}</div></div>${familyActions(font)}</div>
     <div class="meta">${escapeHtml(font.category)}${font.isCondensed ? " · Condensed" : ""}${font.variable ? " · Variable" : ""}${font.lastModified ? `<br>Обновлён: ${escapeHtml(font.lastModified)}` : ""}</div>
     <a class="family-page-link" href="${escapeHtml(font.familyPageUrl)}" target="_blank" rel="noopener">Google Fonts ↗</a>
     <div class="row-tags">${renderFontTags(font, 5)}</div></div>`;
@@ -566,6 +578,11 @@ function favoriteButton(font) {
   return `<button class="favorite ${active ? "active" : ""}" type="button" data-favorite="${escapeHtml(font.family)}" aria-label="${active ? "Убрать из избранного" : "Добавить в избранное"}" aria-pressed="${active}">${active ? "★" : "☆"}</button>`;
 }
 
+function rareButton(font) {
+  const active = state.rareFonts.has(font.family);
+  return `<button class="rare-toggle ${active ? "active" : ""}" type="button" data-rare="${escapeHtml(font.family)}" aria-label="${active ? "Убрать отметку редкого шрифта" : "Пометить как редкий и скрывать из рабочего списка"}" aria-pressed="${active}" title="${active ? "Редкий / скрытый" : "Пометить как редкий"}">${active ? "⊗" : "⊘"}</button>`;
+}
+
 function renderFontCell(font, style) {
   if (!font.styles.includes(style.id)) return `<div class="font-cell"><div class="style-top"><div class="style-label">Нет начертания</div></div><div class="missing">—</div></div>`;
   const download = font.downloads[style.id];
@@ -663,10 +680,12 @@ function syncFilterUI() {
   document.querySelectorAll("#styleFilters input").forEach((input) => { input.checked = state.visibleStyles.has(input.value); });
   document.querySelectorAll("#tagFilters [data-tag]").forEach((button) => button.classList.toggle("active", state.selectedTags.has(button.dataset.tag)));
   document.querySelectorAll("#customTagFilters [data-tag]").forEach((button) => button.classList.toggle("active", state.selectedTags.has(button.dataset.tag)));
-  document.querySelectorAll("#requireStyle option").forEach((option) => option.toggleAttribute("selected", option.value === state.requiredStyle));
+  document.querySelectorAll("#requiredStyleFilters input").forEach((input) => { input.checked = state.requiredStyles.has(input.value); });
+  const requiredNames = STYLE_DEFS.filter((style) => state.requiredStyles.has(style.id)).map((style) => style.name);
+  $("#requiredStylesSummary").textContent = requiredNames.length ? requiredNames.join(" + ") : "Любые начертания";
   $("#condensedOnly").checked = state.condensedOnly;
   $("#variableOnly").checked = state.variableOnly;
-  $("#favoritesOnly").checked = state.favoritesOnly;
+  document.querySelectorAll("#fontScope option").forEach((option) => option.toggleAttribute("selected", option.value === state.fontScope));
   document.querySelectorAll("#sortOrder option").forEach((option) => option.toggleAttribute("selected", option.value === state.sortOrder));
   searchInput.value = state.query;
 }
@@ -675,11 +694,11 @@ function resetFilters() {
   state.query = "";
   state.categories.clear();
   state.visibleStyles = new Set(STYLE_DEFS.map((style) => style.id));
-  state.requiredStyle = "";
+  state.requiredStyles.clear();
   state.selectedTags.clear();
   state.condensedOnly = false;
   state.variableOnly = false;
-  state.favoritesOnly = false;
+  state.fontScope = "working";
   state.sortOrder = "alphabetical";
   state.previewText = DEFAULT_TEXT;
   state.previewSize = 26;
@@ -704,10 +723,14 @@ function bindEvents() {
   ppiInput.addEventListener("change", () => { ppiInput.value = String(state.previewPpi); });
   $("#categoryFilters").addEventListener("change", (event) => { event.target.checked ? state.categories.add(event.target.value) : state.categories.delete(event.target.value); render(); });
   $("#styleFilters").addEventListener("change", (event) => { event.target.checked ? state.visibleStyles.add(event.target.value) : state.visibleStyles.delete(event.target.value); saveState(); render(); });
-  $("#requireStyle").addEventListener("change", (event) => { state.requiredStyle = event.target.value; render(); });
+  $("#requiredStyleFilters").addEventListener("change", (event) => {
+    event.target.checked ? state.requiredStyles.add(event.target.value) : state.requiredStyles.delete(event.target.value);
+    if (event.target.checked) state.visibleStyles.add(event.target.value);
+    syncFilterUI(); saveState(); render();
+  });
   $("#condensedOnly").addEventListener("change", (event) => { state.condensedOnly = event.target.checked; render(); });
   $("#variableOnly").addEventListener("change", (event) => { state.variableOnly = event.target.checked; render(); });
-  $("#favoritesOnly").addEventListener("change", (event) => { state.favoritesOnly = event.target.checked; render(); });
+  $("#fontScope").addEventListener("change", (event) => { state.fontScope = event.target.value; saveState(); render(); });
   $("#tagFilters").addEventListener("click", (event) => toggleTag(event.target.closest("[data-tag]")?.dataset.tag));
   $("#customTagFilters").addEventListener("click", (event) => toggleTag(event.target.closest("[data-tag]")?.dataset.tag));
   $("#exportTags").addEventListener("click", exportTagsFile);
@@ -743,7 +766,15 @@ function bindEvents() {
     const favorite = event.target.closest("[data-favorite]");
     if (favorite) {
       const family = favorite.dataset.favorite;
-      state.favorites.has(family) ? state.favorites.delete(family) : state.favorites.add(family);
+      if (state.favorites.has(family)) state.favorites.delete(family);
+      else { state.favorites.add(family); state.rareFonts.delete(family); }
+      saveState(); render(); return;
+    }
+    const rare = event.target.closest("[data-rare]");
+    if (rare) {
+      const family = rare.dataset.rare;
+      if (state.rareFonts.has(family)) state.rareFonts.delete(family);
+      else { state.rareFonts.add(family); state.favorites.delete(family); }
       saveState(); render(); return;
     }
     const miniTag = event.target.closest(".mini-tag[data-tag]");
@@ -758,6 +789,10 @@ function bindEvents() {
     if (event.target.closest("[data-action='all-styles']")) {
       state.visibleStyles = new Set(STYLE_DEFS.map((style) => style.id));
       syncFilterUI(); saveState(); render();
+    }
+    if (event.target.closest("[data-action='clear-required-styles']")) {
+      state.requiredStyles.clear();
+      syncFilterUI(); render();
     }
   });
 }
