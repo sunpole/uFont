@@ -1,9 +1,10 @@
-﻿.env
+.env
 node_modules/
 ChatGPT - uFont_files/
 ChatGPT - uFont.html
 index-old.html
 uFont-font-database-generator/
 uFont-font-database-generator.zip
+ufont-user-tags-*.json
 *.log
 Thumbs.db
