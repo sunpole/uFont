@@ -105,6 +105,7 @@
     .font-table-scroll { overflow: auto; max-height: calc(100vh - 164px); overscroll-behavior: contain; }
     .font-table { display: grid; width: max-content; min-width: 100%; }
     .table-row { display: grid; grid-template-columns: var(--name-width) repeat(var(--visible-cols), var(--cell-width)); min-width: max-content; border-bottom: 1px solid var(--line); background: var(--surface); }
+    .table-row:not(.header-row), .gallery-card, .matrix-card { content-visibility: auto; contain-intrinsic-size: auto 150px; }
     .table-row:last-child { border-bottom: 0; }
     .table-row:hover:not(.header-row) > * { background-color: #fbfcfa; }
     .header-row { position: sticky; z-index: 12; top: 0; color: var(--muted); background: var(--surface-2); font-size: 11px; font-weight: 800; letter-spacing: .065em; text-transform: uppercase; }
@@ -143,7 +144,8 @@
     .inverse-tag-button.active { color: white; border-color: var(--danger); background: var(--danger); }
     .tag-scale { display: grid; grid-template-columns: 1fr 46px; align-items: center; gap: 8px; margin-top: 10px; }
     .tag-scale output { font-size: 11px; }
-    #tagFilters .tag-button, #customTagFilters .tag-button { font-size: calc(12px * var(--custom-tag-scale, 1)); }
+    #tagFilters .tag-button { font-size: calc(12px * var(--google-tag-scale, 1)); }
+    #customTagFilters .tag-button { font-size: calc(12px * var(--custom-tag-scale, 1)); }
     #customTagFilters .tag-button.active { box-shadow: 0 0 0 3px rgba(23,24,22,.28); }
     .tag-manager { display: grid; gap: 14px; }
     .tag-manager-card { padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: white; box-shadow: var(--shadow); }
@@ -155,6 +157,32 @@
     .tag-manager-count { color: var(--muted); font-size: 11px; }
     .tag-manager-button { min-height: 34px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; font-size: 11px; }
     .tag-manager-button.danger { color: var(--danger); }
+    .tag-editor { width: min(720px, calc(100vw - 24px)); max-height: min(760px, calc(100vh - 24px)); padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; color: var(--ink); background: var(--surface); box-shadow: 0 20px 70px rgba(25,32,28,.28); }
+    .tag-editor::backdrop { background: rgba(17,24,20,.48); backdrop-filter: blur(2px); }
+    .tag-editor-form { display: grid; grid-template-rows: auto auto minmax(150px,1fr) auto; max-height: inherit; }
+    .tag-editor-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; padding: 18px; border-bottom: 1px solid var(--line); }
+    .tag-editor-title { margin: 0; font-size: 20px; }
+    .tag-editor-summary { margin-top: 5px; color: var(--muted); font-size: 12px; }
+    .tag-editor-close { width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 50%; background: white; cursor: pointer; font-size: 20px; }
+    .tag-editor-tools { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+    .tag-editor-new { display: grid; grid-template-columns: minmax(120px,1fr) 44px auto; gap: 7px; }
+    .tag-editor-options { display: grid; grid-template-columns: repeat(auto-fill,minmax(145px,1fr)); align-content: start; gap: 8px; padding: 16px 18px; overflow: auto; }
+    .tag-editor-option { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 9px; background: white; cursor: pointer; }
+    .tag-editor-option.selected, .tag-editor-option:has(input:checked) { border-color: var(--tag-color,#b99c36); box-shadow: inset 0 0 0 1px var(--tag-color,#b99c36); background: #fff8dc; background: color-mix(in srgb,var(--tag-color,#d9b83f) 18%,white); }
+    .tag-editor.fallback-open { position: fixed; inset: 12px; z-index: 1000; display: block; margin: auto; }
+    .tag-editor-option input { width: 18px; height: 18px; accent-color: var(--tag-color,#b99c36); }
+    .tag-editor-option span { min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
+    .tag-editor-empty { grid-column: 1/-1; padding: 24px; color: var(--muted); text-align: center; }
+    .tag-editor-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--line); background: var(--surface-2); }
+    .tag-editor-actions button, .tag-editor-new button { min-height: 38px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: white; cursor: pointer; }
+    .tag-editor-actions .primary, .tag-editor-new button { color: white; border-color: var(--accent); background: var(--accent); }
+    .matrix { display: grid; grid-template-columns: repeat(auto-fill,minmax(210px,1fr)); gap: 10px; }
+    .matrix-card { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); }
+    .matrix-card .sample { min-height: 54px; margin: 14px 0; font-size: max(15px,calc(var(--preview-size) * .72)); }
+    .loupe-card { display: grid; gap: 18px; min-height: calc(100vh - 190px); padding: clamp(18px,4vw,52px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+    .loupe-preview { display: grid; align-items: center; min-height: 300px; overflow-wrap: anywhere; font-size: clamp(40px,9vw,140px); line-height: 1.02; }
+    .loupe-nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; }
+    .loupe-nav button { min-height: 46px; border: 1px solid var(--line); border-radius: 9px; color: var(--accent); background: white; cursor: pointer; }
     .font-cell { min-height: 132px; overflow: hidden; }
     .style-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
     .style-label { color: var(--muted); font-size: 11px; }
@@ -229,7 +257,8 @@
       .style-grid { grid-template-columns: 1fr 1fr; }
       .tool-row { align-items: stretch; }
       .segmented { width: 100%; }
-      .segmented button { flex: 1; }
+      .segmented { flex-wrap: wrap; }
+      .segmented button { flex: 1 1 30%; }
       .gallery { grid-template-columns: 1fr; }
       .inspector-stage { min-height: 420px; }
       .inspector-font-nav button { min-height: 52px; font-size: 13px; }
@@ -237,6 +266,11 @@
       .font-cell { min-height: 122px; }
       .tag-manager-row { grid-template-columns: 42px minmax(0,1fr) auto; }
       .tag-manager-row .tag-manager-count { grid-column: 2; }
+      .tag-editor-tools { grid-template-columns: 1fr; }
+      .tag-editor-new { grid-template-columns: minmax(0,1fr) 44px; }
+      .tag-editor-new button { grid-column: 1/-1; }
+      .tag-editor-options { grid-template-columns: 1fr 1fr; padding: 12px; }
+      .tag-editor-actions button { flex: 1; }
     }
   </style>
 </head>
@@ -282,6 +316,8 @@
         <section class="sidebar-section" data-sidebar-section="google-tags">
           <h2 class="section-title"><span>Теги</span><span class="section-title-actions"><button class="text-button" type="button" data-clear="tags">Сбросить</button><button class="section-visibility" type="button" data-toggle-section="google-tags" aria-expanded="true" aria-label="Свернуть раздел Теги" title="Свернуть раздел">👁</button></span></h2>
           <div class="tag-list" id="tagFilters"></div>
+          <label class="tag-store-status" for="googleTagScale">Масштаб Google-тегов</label>
+          <div class="tag-scale"><input id="googleTagScale" type="range" min="50" max="200" step="5" value="100" list="tagScaleMarks"><output id="googleTagScaleOutput" for="googleTagScale">100%</output></div>
         </section>
 
         <section class="sidebar-section" data-sidebar-section="custom-tags">
@@ -291,8 +327,8 @@
             <select class="control" id="customTagSort" aria-label="Сортировка пользовательских тегов"><option value="asc">Теги А—Я</option><option value="desc">Теги Я—А</option></select>
             <button class="inverse-tag-button" id="invertTagFilter" type="button" aria-pressed="false">Инверсия: выкл.</button>
           </div>
-          <label class="tag-store-status" for="tagScale">Масштаб текста всех тегов</label>
-          <div class="tag-scale"><input id="tagScale" type="range" min="50" max="200" step="5" value="100" list="tagScaleMarks"><output id="tagScaleOutput" for="tagScale">100%</output></div>
+          <label class="tag-store-status" for="customTagScale">Масштаб моих тегов</label>
+          <div class="tag-scale"><input id="customTagScale" type="range" min="50" max="200" step="5" value="100" list="tagScaleMarks"><output id="customTagScaleOutput" for="customTagScale">100%</output></div>
           <datalist id="tagScaleMarks"><option value="50"></option><option value="100"></option><option value="200"></option></datalist>
           <div class="tag-store-status" id="tagStoreStatus"></div>
           <div class="tag-file-actions">
@@ -306,8 +342,13 @@
           <h2 class="section-title"><span>Дополнительно</span><button class="section-visibility" type="button" data-toggle-section="additional" aria-expanded="true" aria-label="Свернуть раздел Дополнительно" title="Свернуть раздел">👁</button></h2>
           <div class="check-list">
             <label class="check"><input id="condensedOnly" type="checkbox"> Только Condensed / Narrow</label>
+            <label class="check"><input id="expandedOnly" type="checkbox"> Только Expanded / Wide</label>
             <label class="check"><input id="variableOnly" type="checkbox"> Только variable</label>
           </div>
+          <details class="multi-select" id="subsetMenu" style="margin-top:12px">
+            <summary><span id="subsetSummary">Любая дополнительная письменность</span><span aria-hidden="true">⌄</span></summary>
+            <div class="multi-select-panel"><div class="check-list" id="subsetFilters"></div><button class="multi-select-clear" type="button" data-action="clear-subsets">Очистить выбор</button></div>
+          </details>
           <label class="is-hidden" for="fontScope">Какие шрифты показывать</label>
           <select class="control" id="fontScope" style="margin-top:12px">
             <option value="working">Рабочие — без редких</option>
@@ -321,6 +362,7 @@
             <option value="alphabetical">По алфавиту</option>
             <option value="custom-tags">С моими тегами сначала</option>
             <option value="condensed">Condensed сначала</option>
+            <option value="expanded">Expanded сначала</option>
             <option value="favorites">Избранные сначала</option>
           </select>
         </section>
@@ -348,6 +390,8 @@
           <div class="segmented" aria-label="Режим отображения">
             <button class="active" type="button" data-view="table">Таблица</button>
             <button type="button" data-view="gallery">Галерея</button>
+            <button type="button" data-view="matrix">Матрица</button>
+            <button type="button" data-view="loupe">Лупа</button>
             <button type="button" data-view="inspector">Инспектор</button>
             <button type="button" data-view="tags">Теги</button>
           </div>
@@ -359,6 +403,15 @@
       </main>
     </div>
   </div>
+
+  <dialog class="tag-editor" id="tagEditor">
+    <form class="tag-editor-form" id="tagEditorForm" method="dialog">
+      <div class="tag-editor-head"><div><h2 class="tag-editor-title" id="tagEditorTitle">Мои теги</h2><div class="tag-editor-summary" id="tagEditorSummary"></div></div><button class="tag-editor-close" type="button" data-tag-editor-close aria-label="Закрыть">×</button></div>
+      <div class="tag-editor-tools"><input class="control" id="tagEditorSearch" type="search" placeholder="Найти тег…" autocomplete="off"><div class="tag-editor-new"><input class="control" id="tagEditorNewName" maxlength="60" placeholder="Новый тег"><input class="inspector-color" id="tagEditorNewColor" type="color" value="#d9b83f" aria-label="Цвет нового тега"><button type="button" id="tagEditorAdd">＋ Добавить</button></div></div>
+      <div class="tag-editor-options" id="tagEditorOptions"></div>
+      <div class="tag-editor-actions"><button type="button" data-tag-editor-close>Отмена</button><button class="primary" id="tagEditorSave" type="submit" value="save">Сохранить пересечение</button></div>
+    </form>
+  </dialog>
 
   <script src="scripts/app.js"></script>
   <script type="text/plain" id="legacy-prototype-script">
