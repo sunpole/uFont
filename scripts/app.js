@@ -26,6 +26,7 @@ const FALLBACK_FONTS = [
 
 const DEFAULT_TEXT = "400 г. МАССА. Съешь ещё этих мягких французских булок.";
 const STORAGE_KEY = "ufont-prototype-v1";
+const TAG_DRAFT_STORAGE_KEY = "ufont-user-tags-draft-v1";
 const $ = (selector) => document.querySelector(selector);
 
 let FONTS = [];
@@ -315,9 +316,15 @@ async function loadCentralTags() {
     state.tagStoreWritable = false;
   }
 
-  state.customTags = new Map(Object.entries(database?.families || {})
-    .map(([family, tags]) => [family, sanitizeCustomTags(tags)])
-    .filter(([, tags]) => tags.length));
+  state.customTags = normalizeTagDatabase(database?.families);
+  if (!state.tagStoreWritable) {
+    try {
+      const draft = JSON.parse(localStorage.getItem(TAG_DRAFT_STORAGE_KEY));
+      state.customTags = mergeTagMaps(state.customTags, normalizeTagDatabase(draft?.families));
+    } catch {
+      localStorage.removeItem(TAG_DRAFT_STORAGE_KEY);
+    }
+  }
   state.tagStoreUpdatedAt = database?.updatedAt || null;
   updateTagStoreStatus();
 }
@@ -327,7 +334,91 @@ function updateTagStoreStatus() {
   if (!status) return;
   status.textContent = state.tagStoreWritable
     ? "Редактирование включено: изменения записываются в data/user-tags.json."
-    : "Общая база открыта для чтения. Для редактирования запустите npm start локально.";
+    : "Статический режим: изменения сохраняются как черновик в браузере. Экспортируйте JSON для переноса на рабочий ПК.";
+}
+
+function normalizeTagDatabase(families) {
+  const output = new Map();
+  if (!families || typeof families !== "object" || Array.isArray(families)) return output;
+  for (const [inputFamily, inputTags] of Object.entries(families)) {
+    const family = canonicalFamilyName(inputFamily);
+    const tags = sanitizeCustomTags(inputTags);
+    if (!family || !tags.length) continue;
+    output.set(family, [...new Set([...(output.get(family) || []), ...tags])]);
+  }
+  return output;
+}
+
+function canonicalFamilyName(value) {
+  const name = String(value || "").trim();
+  if (!name) return "";
+  return FONTS.find((font) => font.family.toLocaleLowerCase("ru") === name.toLocaleLowerCase("ru"))?.family || name.slice(0, 160);
+}
+
+function mergeTagMaps(base, incoming) {
+  const merged = new Map([...base].map(([family, tags]) => [family, [...tags]]));
+  for (const [family, tags] of incoming) merged.set(family, sanitizeCustomTags([...(merged.get(family) || []), ...tags]));
+  return merged;
+}
+
+function tagDatabaseObject() {
+  return {
+    schemaVersion: 1,
+    updatedAt: new Date().toISOString(),
+    families: Object.fromEntries([...state.customTags].sort(([a], [b]) => a.localeCompare(b, "ru")))
+  };
+}
+
+function saveTagDraft() {
+  localStorage.setItem(TAG_DRAFT_STORAGE_KEY, JSON.stringify(tagDatabaseObject()));
+}
+
+async function saveTagsToCurrentStore() {
+  if (!state.tagStoreWritable) {
+    saveTagDraft();
+    return;
+  }
+  const response = await fetch("api/user-tags", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(tagDatabaseObject())
+  });
+  if (!response.ok) throw new Error(String(response.status));
+  const saved = await response.json();
+  state.tagStoreUpdatedAt = saved.updatedAt || null;
+}
+
+function exportTagsFile() {
+  const blob = new Blob([`${JSON.stringify(tagDatabaseObject(), null, 2)}\n`], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `ufont-user-tags-${new Date().toISOString().slice(0, 10)}.json`;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function importTagsFile(file) {
+  if (!file) return;
+  try {
+    const database = JSON.parse(await file.text());
+    const incoming = normalizeTagDatabase(database?.families);
+    if (!incoming.size) throw new Error("В файле нет пользовательских тегов.");
+    const before = countAssignedTags(state.customTags);
+    state.customTags = mergeTagMaps(state.customTags, incoming);
+    const added = countAssignedTags(state.customTags) - before;
+    await saveTagsToCurrentStore();
+    renderCustomTagFilters();
+    syncFilterUI();
+    render();
+    window.alert(`Импорт завершён. Добавлено новых связей «шрифт — тег»: ${added}. Дубли пропущены.`);
+  } catch (error) {
+    window.alert(`Не удалось импортировать теги: ${error.message}`);
+  }
+}
+
+function countAssignedTags(tagMap) {
+  return [...tagMap.values()].reduce((total, tags) => total + tags.length, 0);
 }
 
 function renderCustomTagFilters() {
@@ -338,24 +429,13 @@ function renderCustomTagFilters() {
 }
 
 async function editCustomTags(family) {
-  if (!state.tagStoreWritable) {
-    window.alert("На GitHub Pages теги доступны только для чтения. Запустите проект локально командой npm start, измените теги и отправьте data/user-tags.json в GitHub.");
-    return;
-  }
   const current = state.customTags.get(family) || [];
   const answer = window.prompt(`Мои теги для ${family}\nВведите через запятую. Чтобы удалить все — оставьте поле пустым.`, current.join(", "));
   if (answer === null) return;
   const tags = sanitizeCustomTags(answer.split(","));
   tags.length ? state.customTags.set(family, tags) : state.customTags.delete(family);
   try {
-    const response = await fetch("api/user-tags", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ schemaVersion: 1, families: Object.fromEntries(state.customTags) })
-    });
-    if (!response.ok) throw new Error(String(response.status));
-    const saved = await response.json();
-    state.tagStoreUpdatedAt = saved.updatedAt || null;
+    await saveTagsToCurrentStore();
   } catch (error) {
     current.length ? state.customTags.set(family, current) : state.customTags.delete(family);
     window.alert(`Не удалось записать базу тегов: ${error.message}`);
@@ -517,6 +597,12 @@ function bindEvents() {
   $("#favoritesOnly").addEventListener("change", (event) => { state.favoritesOnly = event.target.checked; render(); });
   $("#tagFilters").addEventListener("click", (event) => toggleTag(event.target.closest("[data-tag]")?.dataset.tag));
   $("#customTagFilters").addEventListener("click", (event) => toggleTag(event.target.closest("[data-tag]")?.dataset.tag));
+  $("#exportTags").addEventListener("click", exportTagsFile);
+  $("#importTags").addEventListener("click", () => $("#importTagsFile").click());
+  $("#importTagsFile").addEventListener("change", async (event) => {
+    await importTagsFile(event.target.files?.[0]);
+    event.target.value = "";
+  });
   $("#sortOrder").addEventListener("change", (event) => { state.sortOrder = event.target.value; saveState(); render(); });
   $("#resetButton").addEventListener("click", resetFilters);
 

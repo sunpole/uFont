@@ -114,6 +114,9 @@
     .add-tag-button:hover { border-color: #b99c36; background: #ffefb7; }
     .user-tags-empty { color: var(--muted); font-size: 12px; }
     .tag-store-status { margin-top: 9px; color: var(--muted); font-size: 11px; line-height: 1.35; }
+    .tag-file-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 10px; }
+    .tag-file-button { min-height: 34px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); background: white; cursor: pointer; font-size: 11px; }
+    .tag-file-button:hover { border-color: #9eaaa3; background: #f7faf8; }
     .font-cell { min-height: 132px; overflow: hidden; }
     .style-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
     .style-label { color: var(--muted); font-size: 11px; }
@@ -198,6 +201,11 @@
           <h2 class="section-title">Мои теги <button class="text-button" type="button" data-clear="custom-tags">Сбросить</button></h2>
           <div class="tag-list" id="customTagFilters"></div>
           <div class="tag-store-status" id="tagStoreStatus"></div>
+          <div class="tag-file-actions">
+            <button class="tag-file-button" id="exportTags" type="button">Экспорт JSON</button>
+            <button class="tag-file-button" id="importTags" type="button">Импорт JSON</button>
+          </div>
+          <input class="is-hidden" id="importTagsFile" type="file" accept="application/json,.json">
         </section>
 
         <section class="sidebar-section">
