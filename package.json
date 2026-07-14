@@ -6,8 +6,9 @@
   "description": "Каталог кириллических Google Fonts для дизайнеров",
   "scripts": {
     "start": "node scripts/serve.mjs",
+    "publish:tags": "node scripts/publish-tags.mjs",
     "update:fonts": "node --env-file=.env scripts/update-google-fonts.mjs",
-    "check": "node --check scripts/app.js && node --check scripts/serve.mjs && node --check scripts/update-google-fonts.mjs"
+    "check": "node --check scripts/app.js && node --check scripts/serve.mjs && node --check scripts/publish-tags.mjs && node --check scripts/update-google-fonts.mjs"
   },
   "engines": {
     "node": ">=24"
