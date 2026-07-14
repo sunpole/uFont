@@ -56,11 +56,13 @@ const state = {
   view: "table",
   inspector: {
     activeLayer: "top",
+    moveStep: 1,
     topFamily: "",
     topStyle: "regular",
     topX: 48,
     topY: 80,
     topSize: 54,
+    topScale: 100,
     topOpacity: 100,
     topColor: "#171816",
     topBlend: "normal",
@@ -70,6 +72,7 @@ const state = {
     bottomX: 28,
     bottomY: 220,
     bottomSize: 54,
+    bottomScale: 100,
     bottomOpacity: 55,
     bottomColor: "#b22f2f",
     bottomBlend: "multiply",
@@ -80,6 +83,8 @@ const state = {
 
 let inspectorDrag = null;
 let lastInspectorWheelAt = 0;
+let inspectorTouchStartX = null;
+let inspectorSuppressClickUntil = 0;
 
 const catalog = $("#catalog");
 const searchInput = $("#searchInput");
@@ -317,6 +322,7 @@ function renderInspector(fonts) {
     </section>
     <aside class="inspector-panel" aria-label="Настройки инспектора">
       <div class="inspector-panel-head"><div class="meta">Верхний шрифт · ${topIndex + 1} из ${pool.length}</div><div class="inspector-current-font">${escapeHtml(topFont.family)}</div></div>
+      <div class="inspector-font-nav" data-inspector-swipe-fonts><button type="button" data-inspector-action="previous-font">← Предыдущий</button><button type="button" data-inspector-action="next-font">Следующий →</button></div>
       <div class="inspector-layer-tabs">
         <button type="button" class="${inspector.activeLayer === "top" ? "active" : ""}" data-inspector-select-layer="top">Верхний слой</button>
         <button type="button" class="${inspector.activeLayer === "bottom" ? "active" : ""}" data-inspector-select-layer="bottom">Нижний слой</button>
@@ -336,7 +342,7 @@ function inspectorBottomControls(font, pool) {
   const inspector = state.inspector;
   const sourceControls = `<div class="inspector-control"><div class="inspector-control-label">Содержимое нижнего слоя</div>
     <div class="inspector-control-row"><button class="inspector-action" type="button" data-inspector-action="bottom-from-top">Закрепить верхний шрифт</button><button class="inspector-action" type="button" data-inspector-action="upload-image">Загрузить изображение</button></div>
-    <button class="inspector-action danger" type="button" data-inspector-action="clear-bottom">Очистить нижний слой</button></div>`;
+    <button class="inspector-action danger" type="button" data-inspector-action="clear-bottom">Удалить изображение / нижний слой</button></div>`;
   if (inspector.bottomType === "font") return `${sourceControls}${inspectorFontChooser("bottom", font, pool)}${inspectorLayerControls("bottom", true)}`;
   if (inspector.bottomType === "image") return `${sourceControls}<div class="meta">Изображение: ${escapeHtml(inspector.imageName || "без названия")}</div>${inspectorLayerControls("bottom", false)}`;
   return `${sourceControls}<div class="empty-state" style="padding:24px 12px"><strong style="font-size:15px">Нижний слой пуст</strong>Добавьте изображение или закрепите текущий верхний шрифт.</div>`;
@@ -354,16 +360,18 @@ function inspectorLayerControls(layer, isFont) {
   const prefix = layer === "top" ? "top" : "bottom";
   const blendOptions = ["normal", "multiply", "screen", "overlay", "darken", "lighten", "difference"];
   return `${isFont ? `<div class="inspector-control-row"><div class="inspector-control"><label>Размер, pt</label><input class="inspector-number" type="number" min="6" max="300" step="1" value="${inspector[`${prefix}Size`]}" data-inspector-setting="${prefix}Size"></div><div class="inspector-control"><label>Цвет</label><input class="inspector-color" type="color" value="${inspector[`${prefix}Color`]}" data-inspector-setting="${prefix}Color"></div></div>` : ""}
+    <div class="inspector-control"><label>Масштаб, %</label><div class="inspector-scale-row"><button type="button" data-scale-change="-10" aria-label="Уменьшить масштаб">−</button><input class="inspector-number" type="number" min="10" max="1000" step="1" value="${inspector[`${prefix}Scale`]}" data-inspector-setting="${prefix}Scale"><button type="button" data-scale-change="10" aria-label="Увеличить масштаб">+</button></div></div>
     <div class="inspector-control"><label>Прозрачность, %</label><input type="range" min="0" max="100" step="1" value="${inspector[`${prefix}Opacity`]}" data-inspector-setting="${prefix}Opacity"><output>${inspector[`${prefix}Opacity`]}%</output></div>
     <div class="inspector-control"><label>Наложение</label><select class="control" data-inspector-setting="${prefix}Blend">${blendOptions.map((mode) => `<option value="${mode}" ${mode === inspector[`${prefix}Blend`] ? "selected" : ""}>${mode}</option>`).join("")}</select></div>
     <div class="inspector-control-row"><div class="inspector-control"><label>X, px</label><input class="inspector-number" type="number" step="1" value="${inspector[`${prefix}X`]}" data-inspector-setting="${prefix}X"></div><div class="inspector-control"><label>Y, px</label><input class="inspector-number" type="number" step="1" value="${inspector[`${prefix}Y`]}" data-inspector-setting="${prefix}Y"></div></div>
+    <div class="inspector-control"><label>Шаг перемещения, px</label><input class="inspector-number" type="number" min="1" max="10000" step="1" value="${inspector.moveStep}" data-inspector-setting="moveStep"></div>
     <div class="inspector-arrows" aria-label="Точная настройка позиции"><button type="button" data-nudge="up">↑</button><button type="button" data-nudge="left">←</button><button type="button" data-nudge="down">↓</button><button type="button" data-nudge="right">→</button></div>`;
 }
 
 function inspectorLayerStyle(layer, font) {
   const inspector = state.inspector;
   const prefix = layer === "top" ? "top" : "bottom";
-  const base = `transform:translate(${inspector[`${prefix}X`]}px,${inspector[`${prefix}Y`]}px);opacity:${inspector[`${prefix}Opacity`] / 100};mix-blend-mode:${inspector[`${prefix}Blend`]}`;
+  const base = `transform:translate(${inspector[`${prefix}X`]}px,${inspector[`${prefix}Y`]}px) scale(${inspector[`${prefix}Scale`] / 100});opacity:${inspector[`${prefix}Opacity`] / 100};mix-blend-mode:${inspector[`${prefix}Blend`]}`;
   if (!font) return base;
   const style = STYLE_DEFS.find((item) => item.id === inspector[`${prefix}Style`]) || STYLE_DEFS[0];
   return `${base};font-family:&quot;${escapeHtml(font.family)}&quot;,${escapeHtml(font.category)};font-size:${inspector[`${prefix}Size`]}pt;font-weight:${style.weight};font-style:${style.italic ? "italic" : "normal"};color:${inspector[`${prefix}Color`]}`;
@@ -714,6 +722,8 @@ function bindEvents() {
   catalog.addEventListener("pointerdown", startInspectorDrag);
   catalog.addEventListener("input", handleInspectorSettingInput);
   catalog.addEventListener("change", handleInspectorChange);
+  catalog.addEventListener("touchstart", handleInspectorFontTouchStart, { passive: true });
+  catalog.addEventListener("touchend", handleInspectorFontTouchEnd, { passive: true });
   document.addEventListener("pointermove", moveInspectorDrag);
   document.addEventListener("pointerup", endInspectorDrag);
 
@@ -727,7 +737,9 @@ function bindEvents() {
     const inspectorAction = event.target.closest("[data-inspector-action]");
     if (inspectorAction) { handleInspectorAction(inspectorAction.dataset.inspectorAction); return; }
     const nudge = event.target.closest("[data-nudge]");
-    if (nudge) { nudgeInspectorLayer(nudge.dataset.nudge, event.shiftKey ? 10 : 1); return; }
+    if (nudge) { nudgeInspectorLayer(nudge.dataset.nudge, state.inspector.moveStep * (event.shiftKey ? 10 : 1)); return; }
+    const scaleChange = event.target.closest("[data-scale-change]");
+    if (scaleChange) { changeInspectorScale(Number(scaleChange.dataset.scaleChange)); return; }
     const favorite = event.target.closest("[data-favorite]");
     if (favorite) {
       const family = favorite.dataset.favorite;
@@ -756,14 +768,32 @@ function handleInspectorWheel(event) {
   const now = Date.now();
   if (now - lastInspectorWheelAt < 80) return;
   lastInspectorWheelAt = now;
+  cycleInspectorFont(event.deltaY > 0 ? 1 : -1);
+}
+
+function cycleInspectorFont(direction) {
   const pool = filteredFonts();
   if (!pool.length) return;
   const currentIndex = Math.max(0, pool.findIndex((font) => font.family === state.inspector.topFamily));
-  const direction = event.deltaY > 0 ? 1 : -1;
   const next = pool[(currentIndex + direction + pool.length) % pool.length];
   state.inspector.topFamily = next.family;
   if (!next.styles.includes(state.inspector.topStyle)) state.inspector.topStyle = next.styles[0] || "regular";
   render();
+}
+
+function handleInspectorFontTouchStart(event) {
+  if (!event.target.closest("[data-inspector-swipe-fonts]")) return;
+  inspectorTouchStartX = event.changedTouches?.[0]?.clientX ?? null;
+}
+
+function handleInspectorFontTouchEnd(event) {
+  if (inspectorTouchStartX === null || !event.target.closest("[data-inspector-swipe-fonts]")) return;
+  const endX = event.changedTouches?.[0]?.clientX;
+  if (Number.isFinite(endX) && Math.abs(endX - inspectorTouchStartX) >= 40) {
+    cycleInspectorFont(endX < inspectorTouchStartX ? 1 : -1);
+    inspectorSuppressClickUntil = Date.now() + 400;
+  }
+  inspectorTouchStartX = null;
 }
 
 function startInspectorDrag(event) {
@@ -804,8 +834,13 @@ function endInspectorDrag(event) {
 function handleInspectorSettingInput(event) {
   const key = event.target.dataset.inspectorSetting;
   if (!key) return;
-  const numeric = /(?:X|Y|Size|Opacity)$/.test(key);
+  const numeric = /(?:X|Y|Size|Scale|Opacity)$/.test(key);
   state.inspector[key] = numeric ? Number(event.target.value) : event.target.value;
+  if (key === "moveStep") {
+    state.inspector.moveStep = Math.min(10000, Math.max(1, Math.round(Number(event.target.value) || 1)));
+    return;
+  }
+  if (key.endsWith("Scale")) state.inspector[key] = Math.min(1000, Math.max(10, Number(event.target.value) || 100));
   const layer = key.startsWith("top") ? "top" : "bottom";
   applyInspectorLayerStyle(layer);
   if (key.endsWith("Opacity") && event.target.nextElementSibling) event.target.nextElementSibling.textContent = `${event.target.value}%`;
@@ -847,11 +882,14 @@ function applyInspectorLayerStyle(layer, providedElement) {
 }
 
 function handleInspectorAction(action) {
+  if (action === "previous-font") { if (Date.now() >= inspectorSuppressClickUntil) cycleInspectorFont(-1); return; }
+  if (action === "next-font") { if (Date.now() >= inspectorSuppressClickUntil) cycleInspectorFont(1); return; }
   if (action === "bottom-from-top") {
     state.inspector.bottomType = "font";
     state.inspector.bottomFamily = state.inspector.topFamily;
     state.inspector.bottomStyle = state.inspector.topStyle;
     state.inspector.bottomSize = state.inspector.topSize;
+    state.inspector.bottomScale = state.inspector.topScale;
     state.inspector.bottomX = state.inspector.topX + 18;
     state.inspector.bottomY = state.inspector.topY + 18;
     state.inspector.activeLayer = "bottom";
@@ -872,6 +910,13 @@ function nudgeInspectorLayer(direction, amount) {
   if (direction === "right") state.inspector[`${prefix}X`] += amount;
   if (direction === "up") state.inspector[`${prefix}Y`] -= amount;
   if (direction === "down") state.inspector[`${prefix}Y`] += amount;
+  render();
+}
+
+function changeInspectorScale(delta) {
+  const prefix = state.inspector.activeLayer === "top" ? "top" : "bottom";
+  const key = `${prefix}Scale`;
+  state.inspector[key] = Math.min(1000, Math.max(10, state.inspector[key] + delta));
   render();
 }
 
