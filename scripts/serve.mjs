@@ -62,10 +62,12 @@ async function handleUserTags(request, response) {
   try {
     const input = JSON.parse(await readRequestBody(request, 512_000));
     const families = normalizeTagFamilies(input?.families);
+    const tagMeta = normalizeTagMeta(input?.tagMeta);
     const database = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       updatedAt: new Date().toISOString(),
-      families
+      families,
+      tagMeta
     };
     await writeFile(TAGS_FILE, `${JSON.stringify(database, null, 2)}\n`, "utf8");
     response.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
@@ -81,8 +83,21 @@ function normalizeTagFamilies(value) {
   const output = {};
   for (const [family, tags] of Object.entries(value)) {
     if (!family.trim() || !Array.isArray(tags)) continue;
-    const cleanTags = [...new Set(tags.map((tag) => String(tag).trim().toLocaleLowerCase("ru")).filter(Boolean))].slice(0, 20);
+    const cleanTags = [...new Set(tags.map((tag) => String(tag).trim().toLocaleLowerCase("ru")).filter(Boolean))].slice(0, 99);
     if (cleanTags.length) output[family.slice(0, 160)] = cleanTags.map((tag) => tag.slice(0, 60));
+  }
+  return output;
+}
+
+function normalizeTagMeta(value) {
+  if (value == null) return {};
+  if (typeof value !== "object" || Array.isArray(value)) throw new Error("tagMeta must be an object");
+  const output = {};
+  for (const [inputTag, metadata] of Object.entries(value)) {
+    const tag = String(inputTag).trim().toLocaleLowerCase("ru").slice(0, 60);
+    if (!tag) continue;
+    const inputColor = String(metadata?.color || "").toLowerCase();
+    output[tag] = { color: /^#[0-9a-f]{6}$/.test(inputColor) ? inputColor : "#d9b83f" };
   }
   return output;
 }

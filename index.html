@@ -46,6 +46,9 @@
     .clear-search { position: absolute; right: 7px; top: 5px; width: 32px; height: 32px; border: 0; border-radius: 50%; color: #dbe2de; background: transparent; cursor: pointer; }
     .clear-search:hover { background: #3b4c44; }
     .result-count { margin-left: auto; white-space: nowrap; color: #d8e2dc; font-variant-numeric: tabular-nums; }
+    .top-links { display: flex; align-items: center; gap: 7px; margin-left: auto; }
+    .top-link { padding: 6px 9px; border: 1px solid #506259; border-radius: 8px; color: #e3ebe6; text-decoration: none; white-space: nowrap; font-size: 11px; }
+    .top-link:hover { border-color: #8aa296; background: #293a32; }
 
     .workspace { display: grid; grid-template-columns: 270px minmax(0, 1fr); min-height: calc(100vh - 68px); }
     .sidebar { position: sticky; top: 68px; height: calc(100vh - 68px); overflow: auto; padding: 20px 18px 40px; border-right: 1px solid var(--line); background: var(--surface); }
@@ -127,6 +130,24 @@
     .tag-file-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 10px; }
     .tag-file-button { min-height: 34px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); background: white; cursor: pointer; font-size: 11px; }
     .tag-file-button:hover { border-color: #9eaaa3; background: #f7faf8; }
+    .tag-filter-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 10px; }
+    .tag-filter-tools .control { height: 34px; font-size: 11px; }
+    .inverse-tag-button { min-height: 34px; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); background: white; cursor: pointer; font-size: 11px; }
+    .inverse-tag-button.active { color: white; border-color: var(--danger); background: var(--danger); }
+    .tag-scale { display: grid; grid-template-columns: 1fr 46px; align-items: center; gap: 8px; margin-top: 10px; }
+    .tag-scale output { font-size: 11px; }
+    #customTagFilters .tag-button { font-size: calc(12px * var(--custom-tag-scale, 1)); }
+    #customTagFilters .tag-button.active { box-shadow: 0 0 0 3px rgba(23,24,22,.28); }
+    .tag-manager { display: grid; gap: 14px; }
+    .tag-manager-card { padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: white; box-shadow: var(--shadow); }
+    .tag-manager-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+    .tag-manager-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag-manager-list { display: grid; gap: 8px; margin-top: 14px; }
+    .tag-manager-row { display: grid; grid-template-columns: 48px minmax(120px,1fr) auto auto auto; align-items: center; gap: 8px; padding: 9px; border: 1px solid var(--line); border-radius: 9px; }
+    .tag-manager-row input[type="color"] { width: 42px; height: 34px; padding: 2px; border: 1px solid var(--line); border-radius: 7px; background: white; }
+    .tag-manager-count { color: var(--muted); font-size: 11px; }
+    .tag-manager-button { min-height: 34px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; font-size: 11px; }
+    .tag-manager-button.danger { color: var(--danger); }
     .font-cell { min-height: 132px; overflow: hidden; }
     .style-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
     .style-label { color: var(--muted); font-size: 11px; }
@@ -195,6 +216,8 @@
     @media (max-width: 560px) {
       :root { --name-width: 165px; --cell-width: 165px; }
       .brand span, .result-count { display: none; }
+      .top-links { order: 2; margin-left: auto; }
+      .top-link { padding: 6px 7px; }
       .sidebar { grid-template-columns: 1fr; }
       .style-grid { grid-template-columns: 1fr 1fr; }
       .tool-row { align-items: stretch; }
@@ -205,6 +228,8 @@
       .inspector-font-nav button { min-height: 52px; font-size: 13px; }
       .font-name-cell { min-height: 122px; }
       .font-cell { min-height: 122px; }
+      .tag-manager-row { grid-template-columns: 42px minmax(0,1fr) auto; }
+      .tag-manager-row .tag-manager-count { grid-column: 2; }
     }
   </style>
 </head>
@@ -217,6 +242,10 @@
         <input id="searchInput" type="search" placeholder="Поиск по названию, дизайнеру или тегу…" autocomplete="off">
         <button class="clear-search is-hidden" id="clearSearch" type="button" aria-label="Очистить поиск">×</button>
       </div>
+      <nav class="top-links" aria-label="Ссылки проекта">
+        <a class="top-link" href="https://github.com/sunpole/uFont" target="_blank" rel="noopener">GitHub ↗</a>
+        <a class="top-link" id="environmentLink" href="https://sunpole.github.io/uFont/" target="_blank" rel="noopener">GitHub Pages ↗</a>
+      </nav>
       <div class="result-count" id="resultCount" aria-live="polite"></div>
     </header>
 
@@ -251,6 +280,12 @@
         <section class="sidebar-section">
           <h2 class="section-title">Мои теги <button class="text-button" type="button" data-clear="custom-tags">Сбросить</button></h2>
           <div class="tag-list" id="customTagFilters"></div>
+          <div class="tag-filter-tools">
+            <select class="control" id="customTagSort" aria-label="Сортировка пользовательских тегов"><option value="asc">Теги А—Я</option><option value="desc">Теги Я—А</option></select>
+            <button class="inverse-tag-button" id="invertTagFilter" type="button" aria-pressed="false">Инверсия: выкл.</button>
+          </div>
+          <div class="tag-scale"><input id="tagScale" type="range" min="50" max="200" step="5" value="100" list="tagScaleMarks"><output id="tagScaleOutput" for="tagScale">100%</output></div>
+          <datalist id="tagScaleMarks"><option value="50"></option><option value="100"></option><option value="200"></option></datalist>
           <div class="tag-store-status" id="tagStoreStatus"></div>
           <div class="tag-file-actions">
             <button class="tag-file-button" id="exportTags" type="button">Экспорт JSON</button>
@@ -306,6 +341,7 @@
             <button class="active" type="button" data-view="table">Таблица</button>
             <button type="button" data-view="gallery">Галерея</button>
             <button type="button" data-view="inspector">Инспектор</button>
+            <button type="button" data-view="tags">Теги</button>
           </div>
           <button class="reset-button" id="resetButton" type="button">Сбросить всё</button>
         </div>
