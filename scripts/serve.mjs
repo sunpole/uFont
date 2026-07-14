@@ -63,11 +63,13 @@ async function handleUserTags(request, response) {
     const input = JSON.parse(await readRequestBody(request, 512_000));
     const families = normalizeTagFamilies(input?.families);
     const tagMeta = normalizeTagMeta(input?.tagMeta);
+    const preferences = normalizePreferences(input?.preferences);
     const database = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       updatedAt: new Date().toISOString(),
       families,
-      tagMeta
+      tagMeta,
+      preferences
     };
     await writeFile(TAGS_FILE, `${JSON.stringify(database, null, 2)}\n`, "utf8");
     response.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
@@ -100,6 +102,42 @@ function normalizeTagMeta(value) {
     output[tag] = { color: /^#[0-9a-f]{6}$/.test(inputColor) ? inputColor : "#d9b83f" };
   }
   return output;
+}
+
+function normalizePreferences(value) {
+  if (value == null) return {};
+  if (typeof value !== "object" || Array.isArray(value)) throw new Error("preferences must be an object");
+  const output = {};
+  const arrayLimits = { visibleStyles: [8, 30], favorites: [3000, 160], rareFonts: [3000, 160], categories: [20, 60], requiredStyles: [8, 30], selectedTags: [99, 60] };
+  for (const [key, [limit, length]] of Object.entries(arrayLimits)) output[key] = normalizeStringArray(value[key], limit, length);
+  const strings = { fontScope: 20, sortOrder: 30, previewText: 160, previewUnit: 10, view: 20, tagSort: 10, query: 160 };
+  for (const [key, length] of Object.entries(strings)) if (typeof value[key] === "string") output[key] = value[key].slice(0, length);
+  const numbers = { previewSize: [8, 72], previewPpi: [72, 2400], tagScale: [50, 200] };
+  for (const [key, [min, max]] of Object.entries(numbers)) output[key] = clampNumber(value[key], min, max);
+  output.invertTagFilter = Boolean(value.invertTagFilter);
+  output.condensedOnly = Boolean(value.condensedOnly);
+  output.variableOnly = Boolean(value.variableOnly);
+  output.inspector = normalizeInspector(value.inspector);
+  return output;
+}
+
+function normalizeInspector(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const output = {};
+  const limits = { moveStep: [1, 10000], topX: [-100000, 100000], topY: [-100000, 100000], bottomX: [-100000, 100000], bottomY: [-100000, 100000], topSize: [6, 300], bottomSize: [6, 300], topScale: [10, 1000], bottomScale: [10, 1000], topOpacity: [0, 100], bottomOpacity: [0, 100] };
+  for (const [key, [min, max]] of Object.entries(limits)) output[key] = clampNumber(value[key], min, max);
+  for (const key of ["activeLayer", "topFamily", "topStyle", "topColor", "topBlend", "bottomType", "bottomFamily", "bottomStyle", "bottomColor", "bottomBlend"]) if (typeof value[key] === "string") output[key] = value[key].slice(0, 160);
+  return output;
+}
+
+function normalizeStringArray(value, limit, maxLength) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => String(item).trim()).filter(Boolean))].slice(0, limit).map((item) => item.slice(0, maxLength));
+}
+
+function clampNumber(value, min, max) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : min;
 }
 
 async function readRequestBody(request, limit) {
