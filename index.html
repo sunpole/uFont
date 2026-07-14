@@ -107,6 +107,13 @@
     .row-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 11px; }
     .mini-tag { padding: 2px 6px; border: 0; border-radius: 999px; color: #536159; background: #edf1ee; cursor: pointer; font-size: 10px; }
     .mini-tag:hover { color: var(--accent); background: var(--accent-soft); }
+    .mini-tag.custom { color: #604a13; background: #fff0bd; }
+    .mini-tag.custom:hover { color: #392b08; background: #ffe18a; }
+    .family-actions { display: flex; align-items: center; gap: 2px; }
+    .add-tag-button { flex: none; min-height: 28px; padding: 3px 7px; border: 1px solid #d8c680; border-radius: 7px; color: #5c4915; background: #fff8dc; cursor: pointer; font-size: 10px; }
+    .add-tag-button:hover { border-color: #b99c36; background: #ffefb7; }
+    .user-tags-empty { color: var(--muted); font-size: 12px; }
+    .tag-store-status { margin-top: 9px; color: var(--muted); font-size: 11px; line-height: 1.35; }
     .font-cell { min-height: 132px; overflow: hidden; }
     .style-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
     .style-label { color: var(--muted); font-size: 11px; }
@@ -188,11 +195,25 @@
         </section>
 
         <section class="sidebar-section">
+          <h2 class="section-title">Мои теги <button class="text-button" type="button" data-clear="custom-tags">Сбросить</button></h2>
+          <div class="tag-list" id="customTagFilters"></div>
+          <div class="tag-store-status" id="tagStoreStatus"></div>
+        </section>
+
+        <section class="sidebar-section">
           <h2 class="section-title">Дополнительно</h2>
           <div class="check-list">
+            <label class="check"><input id="condensedOnly" type="checkbox"> Только Condensed / Narrow</label>
             <label class="check"><input id="variableOnly" type="checkbox"> Только variable</label>
             <label class="check"><input id="favoritesOnly" type="checkbox"> Только избранные</label>
           </div>
+          <label class="is-hidden" for="sortOrder">Сортировка</label>
+          <select class="control" id="sortOrder" style="margin-top:12px">
+            <option value="alphabetical">По алфавиту</option>
+            <option value="custom-tags">С моими тегами сначала</option>
+            <option value="condensed">Condensed сначала</option>
+            <option value="favorites">Избранные сначала</option>
+          </select>
         </section>
 
         <section class="sidebar-section">
