@@ -8,7 +8,6 @@
   <meta name="description" content="Рабочий прототип каталога для сравнения кириллических шрифтов и их начертаний.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Roboto+Condensed:ital,wght@0,100..900;1,100..900&family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,600;0,700;0,900;1,100;1,300;1,400;1,500;1,600;1,700;1,900&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #f4f5f2;
@@ -109,7 +108,13 @@
     .mini-tag { padding: 2px 6px; border: 0; border-radius: 999px; color: #536159; background: #edf1ee; cursor: pointer; font-size: 10px; }
     .mini-tag:hover { color: var(--accent); background: var(--accent-soft); }
     .font-cell { min-height: 132px; overflow: hidden; }
-    .style-label { margin-bottom: 12px; color: var(--muted); font-size: 11px; }
+    .style-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+    .style-label { color: var(--muted); font-size: 11px; }
+    .download-link, .family-page-link { border: 0; color: var(--accent); background: transparent; cursor: pointer; text-decoration: none; font-size: 11px; }
+    .download-link { flex: none; padding: 3px 6px; border: 1px solid #bad1c4; border-radius: 6px; background: #f2f8f4; }
+    .download-link:hover, .family-page-link:hover { text-decoration: underline; }
+    .download-link:disabled { cursor: wait; opacity: .6; }
+    .family-page-link { display: inline-block; margin-top: 7px; }
     .sample { font-size: var(--preview-size); line-height: 1.12; overflow-wrap: anywhere; }
     .missing { display: grid; place-items: center; min-height: 90px; color: #bdc1bb; font-size: 23px; }
 
@@ -217,13 +222,14 @@
           <button class="reset-button" id="resetButton" type="button">Сбросить всё</button>
         </div>
 
-        <div class="notice" id="fontNotice">Не удалось загрузить веб-шрифты. Проверьте подключение к интернету — сейчас показаны системные замены.</div>
+        <div class="notice" id="fontNotice"></div>
         <section id="catalog" aria-label="Каталог шрифтов"></section>
       </main>
     </div>
   </div>
 
-  <script>
+  <script src="scripts/app.js"></script>
+  <script type="text/plain" id="legacy-prototype-script">
     "use strict";
 
     const STYLE_DEFS = [
