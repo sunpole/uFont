@@ -17,6 +17,7 @@ const FALLBACK_FONTS = [
   { family: "Playfair Display", category: "serif", variable: true, tags: ["serif", "editorial"] }
 ].map((font) => addFontId({
   ...font,
+  isCondensed: /\b(condensed|narrow|compressed)\b/i.test(font.family),
   styles: STYLE_DEFS.map((style) => style.id),
   cssStyles: STYLE_DEFS,
   downloads: {},
@@ -40,8 +41,13 @@ const state = {
   visibleStyles: new Set(STYLE_DEFS.map((style) => style.id)),
   requiredStyle: "",
   selectedTags: new Set(),
+  customTags: new Map(),
+  tagStoreWritable: false,
+  tagStoreUpdatedAt: null,
+  condensedOnly: false,
   variableOnly: false,
   favoritesOnly: false,
+  sortOrder: "alphabetical",
   favorites: new Set(),
   previewText: DEFAULT_TEXT,
   previewSize: 26,
@@ -76,6 +82,8 @@ async function initialize() {
     showNotice(`Полная база не загрузилась: ${error.message}. ${hint} Пока показаны 3 тестовых семейства.`, true);
   }
 
+  await loadCentralTags();
+
   fontById = new Map(FONTS.map((font) => [font.id, font]));
   categories = [...new Set(FONTS.map((font) => font.category))].sort();
   filterTags = collectTopTags(FONTS, 36);
@@ -102,11 +110,17 @@ function normalizeDatabaseFont(font) {
     .map((tag) => String(tag?.name || tag || "").replace(/^\/+/, "").toLocaleLowerCase("ru"))
     .filter(Boolean);
   const derivedTags = [font.category, font.variable ? "variable" : "", ...(font.subsets || []).filter((subset) => subset.startsWith("cyrillic"))];
+  const axes = Array.isArray(font.axes) ? font.axes : [];
+  const condensedSignal = [font.family, ...googleTags].join(" ");
+  const isCondensed = /\b(condensed|narrow|compressed|compact)\b/i.test(condensedSignal)
+    || axes.some((axis) => axis?.tag === "wdth" && Number(axis.min) < 100);
+  if (isCondensed) derivedTags.push("condensed");
 
   return addFontId({
     family: font.family,
     category: font.category || "unknown",
     variable: Boolean(font.variable),
+    isCondensed,
     tags: [...new Set([...derivedTags, ...googleTags].filter(Boolean))],
     styles: [...new Set(styles)],
     cssStyles,
@@ -145,6 +159,7 @@ function loadState() {
     state.visibleStyles = new Set((saved.visibleStyles || []).filter((id) => STYLE_DEFS.some((style) => style.id === id)));
     if (!state.visibleStyles.size) state.visibleStyles.add("regular");
     state.favorites = new Set(saved.favorites || []);
+    state.sortOrder = ["alphabetical", "custom-tags", "condensed", "favorites"].includes(saved.sortOrder) ? saved.sortOrder : "alphabetical";
     state.previewText = typeof saved.previewText === "string" ? saved.previewText : DEFAULT_TEXT;
     const savedSize = Number(saved.previewSize);
     const sizeInPoints = saved.previewUnit === "pt" ? savedSize : Math.round(savedSize * 0.75);
@@ -160,6 +175,7 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     visibleStyles: [...state.visibleStyles],
     favorites: [...state.favorites],
+    sortOrder: state.sortOrder,
     previewText: state.previewText,
     previewSize: state.previewSize,
     previewUnit: "pt",
@@ -177,9 +193,11 @@ function buildControls() {
   `).join("");
   $("#requireStyle").innerHTML = `<option value="">Любые начертания</option>${STYLE_DEFS.map((style) => `<option value="${style.id}">${escapeHtml(style.name)}</option>`).join("")}`;
   $("#tagFilters").innerHTML = filterTags.map((tag) => `<button class="tag-button" type="button" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`).join("");
+  renderCustomTagFilters();
   previewInput.value = state.previewText;
   sizeRange.value = String(state.previewSize);
   ppiInput.value = String(state.previewPpi);
+  document.querySelectorAll("#sortOrder option").forEach((option) => option.toggleAttribute("selected", option.value === state.sortOrder));
   updateSize();
   updateViewButtons();
 }
@@ -187,15 +205,25 @@ function buildControls() {
 function filteredFonts() {
   const query = state.query.trim().toLocaleLowerCase("ru");
   return FONTS.filter((font) => {
-    const haystack = [font.family, font.category, ...font.tags].join(" ").toLocaleLowerCase("ru");
+    const tags = allTags(font);
+    const haystack = [font.family, font.category, ...tags].join(" ").toLocaleLowerCase("ru");
     if (query && !haystack.includes(query)) return false;
     if (state.categories.size && !state.categories.has(font.category)) return false;
     if (state.requiredStyle && !font.styles.includes(state.requiredStyle)) return false;
-    if (state.selectedTags.size && [...state.selectedTags].some((tag) => !font.tags.includes(tag))) return false;
+    if (state.selectedTags.size && [...state.selectedTags].some((tag) => !tags.includes(tag))) return false;
+    if (state.condensedOnly && !font.isCondensed) return false;
     if (state.variableOnly && !font.variable) return false;
     if (state.favoritesOnly && !state.favorites.has(font.family)) return false;
     return true;
-  });
+  }).sort(compareFonts);
+}
+
+function compareFonts(a, b) {
+  const byName = () => a.family.localeCompare(b.family, "ru");
+  if (state.sortOrder === "custom-tags") return Number(customTagsFor(b).length > 0) - Number(customTagsFor(a).length > 0) || byName();
+  if (state.sortOrder === "condensed") return Number(b.isCondensed) - Number(a.isCondensed) || byName();
+  if (state.sortOrder === "favorites") return Number(state.favorites.has(b.family)) - Number(state.favorites.has(a.family)) || byName();
+  return byName();
 }
 
 function render() {
@@ -227,23 +255,117 @@ function renderGallery(fonts, visibleStyles) {
   const galleryStyle = visibleStyles[0] || STYLE_DEFS[0];
   catalog.innerHTML = `<div class="gallery">${fonts.map((font) => `
     <article class="gallery-card" data-font-id="${escapeHtml(font.id)}">
-      <div class="family-line"><div><div class="family-name">${escapeHtml(font.family)}</div><div class="meta">${escapeHtml(font.category)}${font.variable ? " · Variable" : ""}</div></div>${favoriteButton(font)}</div>
+      <div class="family-line"><div><div class="family-name">${escapeHtml(font.family)}</div><div class="meta">${escapeHtml(font.category)}${font.isCondensed ? " · Condensed" : ""}${font.variable ? " · Variable" : ""}</div></div>${familyActions(font)}</div>
       <div class="sample" style="${fontStyle(font, galleryStyle)}">${escapeHtml(state.previewText || " ")}</div>
       <div class="style-pills">${STYLE_DEFS.filter((style) => font.styles.includes(style.id)).map((style) => `<span class="style-pill">${escapeHtml(style.name)}</span>`).join("")}</div>
       <a class="family-page-link" href="${escapeHtml(font.familyPageUrl)}" target="_blank" rel="noopener">Открыть в Google Fonts ↗</a>
-      <div class="row-tags">${font.tags.slice(0, 6).map(tagButton).join("")}</div>
+      <div class="row-tags">${renderFontTags(font, 6)}</div>
     </article>`).join("")}</div>`;
 }
 
 function renderNameCell(font) {
-  return `<div class="font-name-cell"><div class="family-line"><div class="family-name">${escapeHtml(font.family)}</div>${favoriteButton(font)}</div>
-    <div class="meta">${escapeHtml(font.category)}${font.variable ? " · Variable" : ""}${font.lastModified ? `<br>Обновлён: ${escapeHtml(font.lastModified)}` : ""}</div>
+  return `<div class="font-name-cell"><div class="family-line"><div class="family-name">${escapeHtml(font.family)}</div>${familyActions(font)}</div>
+    <div class="meta">${escapeHtml(font.category)}${font.isCondensed ? " · Condensed" : ""}${font.variable ? " · Variable" : ""}${font.lastModified ? `<br>Обновлён: ${escapeHtml(font.lastModified)}` : ""}</div>
     <a class="family-page-link" href="${escapeHtml(font.familyPageUrl)}" target="_blank" rel="noopener">Google Fonts ↗</a>
-    <div class="row-tags">${font.tags.slice(0, 3).map(tagButton).join("")}</div></div>`;
+    <div class="row-tags">${renderFontTags(font, 5)}</div></div>`;
+}
+
+function familyActions(font) {
+  return `<div class="family-actions"><button class="add-tag-button" type="button" data-edit-tags="${escapeHtml(font.family)}" aria-label="Изменить пользовательские теги">＋ тег</button>${favoriteButton(font)}</div>`;
+}
+
+function renderFontTags(font, limit) {
+  const custom = customTagsFor(font).map((tag) => `<button class="mini-tag custom" type="button" data-tag="${escapeHtml(tag)}" title="Пользовательский тег">${escapeHtml(tag)}</button>`);
+  const builtIn = font.tags.filter((tag) => !customTagsFor(font).includes(tag)).map(tagButton);
+  return [...custom, ...builtIn].slice(0, limit).join("");
 }
 
 function tagButton(tag) {
   return `<button class="mini-tag" type="button" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`;
+}
+
+function customTagsFor(font) {
+  return state.customTags.get(font.family) || [];
+}
+
+function allTags(font) {
+  return [...new Set([...font.tags, ...customTagsFor(font)])];
+}
+
+function sanitizeCustomTags(tags) {
+  if (!Array.isArray(tags)) return [];
+  return [...new Set(tags.map((tag) => String(tag).trim().toLocaleLowerCase("ru")).filter(Boolean))].slice(0, 20);
+}
+
+async function loadCentralTags() {
+  let database;
+  try {
+    const apiResponse = await fetch("api/user-tags", { cache: "no-store" });
+    if (!apiResponse.ok) throw new Error(String(apiResponse.status));
+    database = await apiResponse.json();
+    state.tagStoreWritable = true;
+  } catch {
+    try {
+      const staticResponse = await fetch("data/user-tags.json", { cache: "no-store" });
+      if (!staticResponse.ok) throw new Error(String(staticResponse.status));
+      database = await staticResponse.json();
+    } catch {
+      database = { families: {} };
+    }
+    state.tagStoreWritable = false;
+  }
+
+  state.customTags = new Map(Object.entries(database?.families || {})
+    .map(([family, tags]) => [family, sanitizeCustomTags(tags)])
+    .filter(([, tags]) => tags.length));
+  state.tagStoreUpdatedAt = database?.updatedAt || null;
+  updateTagStoreStatus();
+}
+
+function updateTagStoreStatus() {
+  const status = $("#tagStoreStatus");
+  if (!status) return;
+  status.textContent = state.tagStoreWritable
+    ? "Редактирование включено: изменения записываются в data/user-tags.json."
+    : "Общая база открыта для чтения. Для редактирования запустите npm start локально.";
+}
+
+function renderCustomTagFilters() {
+  const tags = [...new Set([...state.customTags.values()].flat())].sort((a, b) => a.localeCompare(b, "ru"));
+  $("#customTagFilters").innerHTML = tags.length
+    ? tags.map((tag) => `<button class="tag-button custom" type="button" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`).join("")
+    : `<span class="user-tags-empty">Добавьте тег кнопкой «＋ тег» возле семейства.</span>`;
+}
+
+async function editCustomTags(family) {
+  if (!state.tagStoreWritable) {
+    window.alert("На GitHub Pages теги доступны только для чтения. Запустите проект локально командой npm start, измените теги и отправьте data/user-tags.json в GitHub.");
+    return;
+  }
+  const current = state.customTags.get(family) || [];
+  const answer = window.prompt(`Мои теги для ${family}\nВведите через запятую. Чтобы удалить все — оставьте поле пустым.`, current.join(", "));
+  if (answer === null) return;
+  const tags = sanitizeCustomTags(answer.split(","));
+  tags.length ? state.customTags.set(family, tags) : state.customTags.delete(family);
+  try {
+    const response = await fetch("api/user-tags", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ schemaVersion: 1, families: Object.fromEntries(state.customTags) })
+    });
+    if (!response.ok) throw new Error(String(response.status));
+    const saved = await response.json();
+    state.tagStoreUpdatedAt = saved.updatedAt || null;
+  } catch (error) {
+    current.length ? state.customTags.set(family, current) : state.customTags.delete(family);
+    window.alert(`Не удалось записать базу тегов: ${error.message}`);
+    return;
+  }
+  const availableTags = new Set([...state.customTags.values()].flat());
+  state.selectedTags = new Set([...state.selectedTags].filter((tag) => filterTags.includes(tag) || availableTags.has(tag)));
+  renderCustomTagFilters();
+  syncFilterUI();
+  render();
 }
 
 function favoriteButton(font) {
@@ -347,9 +469,12 @@ function syncFilterUI() {
   document.querySelectorAll("#categoryFilters input").forEach((input) => { input.checked = state.categories.has(input.value); });
   document.querySelectorAll("#styleFilters input").forEach((input) => { input.checked = state.visibleStyles.has(input.value); });
   document.querySelectorAll("#tagFilters [data-tag]").forEach((button) => button.classList.toggle("active", state.selectedTags.has(button.dataset.tag)));
-  $("#requireStyle").value = state.requiredStyle;
+  document.querySelectorAll("#customTagFilters [data-tag]").forEach((button) => button.classList.toggle("active", state.selectedTags.has(button.dataset.tag)));
+  document.querySelectorAll("#requireStyle option").forEach((option) => option.toggleAttribute("selected", option.value === state.requiredStyle));
+  $("#condensedOnly").checked = state.condensedOnly;
   $("#variableOnly").checked = state.variableOnly;
   $("#favoritesOnly").checked = state.favoritesOnly;
+  document.querySelectorAll("#sortOrder option").forEach((option) => option.toggleAttribute("selected", option.value === state.sortOrder));
   searchInput.value = state.query;
 }
 
@@ -359,8 +484,10 @@ function resetFilters() {
   state.visibleStyles = new Set(STYLE_DEFS.map((style) => style.id));
   state.requiredStyle = "";
   state.selectedTags.clear();
+  state.condensedOnly = false;
   state.variableOnly = false;
   state.favoritesOnly = false;
+  state.sortOrder = "alphabetical";
   state.previewText = DEFAULT_TEXT;
   state.previewSize = 26;
   state.previewPpi = 300;
@@ -385,14 +512,19 @@ function bindEvents() {
   $("#categoryFilters").addEventListener("change", (event) => { event.target.checked ? state.categories.add(event.target.value) : state.categories.delete(event.target.value); render(); });
   $("#styleFilters").addEventListener("change", (event) => { event.target.checked ? state.visibleStyles.add(event.target.value) : state.visibleStyles.delete(event.target.value); saveState(); render(); });
   $("#requireStyle").addEventListener("change", (event) => { state.requiredStyle = event.target.value; render(); });
+  $("#condensedOnly").addEventListener("change", (event) => { state.condensedOnly = event.target.checked; render(); });
   $("#variableOnly").addEventListener("change", (event) => { state.variableOnly = event.target.checked; render(); });
   $("#favoritesOnly").addEventListener("change", (event) => { state.favoritesOnly = event.target.checked; render(); });
   $("#tagFilters").addEventListener("click", (event) => toggleTag(event.target.closest("[data-tag]")?.dataset.tag));
+  $("#customTagFilters").addEventListener("click", (event) => toggleTag(event.target.closest("[data-tag]")?.dataset.tag));
+  $("#sortOrder").addEventListener("change", (event) => { state.sortOrder = event.target.value; saveState(); render(); });
   $("#resetButton").addEventListener("click", resetFilters);
 
   document.addEventListener("click", (event) => {
     const download = event.target.closest("[data-download-url]");
     if (download) { downloadFont(download); return; }
+    const editTags = event.target.closest("[data-edit-tags]");
+    if (editTags) { editCustomTags(editTags.dataset.editTags); return; }
     const favorite = event.target.closest("[data-favorite]");
     if (favorite) {
       const family = favorite.dataset.favorite;
@@ -406,6 +538,7 @@ function bindEvents() {
     const clearButton = event.target.closest("[data-clear]");
     if (clearButton?.dataset.clear === "categories") state.categories.clear();
     if (clearButton?.dataset.clear === "tags") state.selectedTags.clear();
+    if (clearButton?.dataset.clear === "custom-tags") state.selectedTags.clear();
     if (clearButton) { syncFilterUI(); render(); return; }
     if (event.target.closest("[data-action='all-styles']")) {
       state.visibleStyles = new Set(STYLE_DEFS.map((style) => style.id));
