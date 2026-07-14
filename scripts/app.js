@@ -453,7 +453,7 @@ function renderGallery(fonts, visibleStyles) {
   catalog.innerHTML = `<div class="gallery">${fonts.map((font) => `
     <article class="gallery-card" data-font-id="${escapeHtml(font.id)}">
       <div class="family-line"><div><div class="family-title">${rareButton(font)}<div class="family-name">${escapeHtml(font.family)}</div></div><div class="meta">${font.designer ? `${escapeHtml(font.designer)} · ` : ""}${escapeHtml(font.category)}${font.isCondensed ? " · Condensed" : ""}${font.isExpanded ? " · Expanded" : ""}${font.variable ? " · Variable" : ""}</div></div>${familyActions(font)}</div>
-      <div class="sample" style="${fontStyle(font, galleryStyle)}">${escapeHtml(state.previewText || " ")}</div>
+      <div class="sample" style="${fontStyle(font, styleForFont(font, [galleryStyle]))}">${escapeHtml(state.previewText || " ")}</div>
       <div class="style-pills">${STYLE_DEFS.filter((style) => font.styles.includes(style.id)).map((style) => `<span class="style-pill">${escapeHtml(style.name)}</span>`).join("")}</div>
       <a class="family-page-link" href="${escapeHtml(font.familyPageUrl)}" target="_blank" rel="noopener">Открыть в Google Fonts ↗</a>
       <div class="row-tags">${renderFontTags(font, 6)}</div>
@@ -464,7 +464,7 @@ function renderMatrix(fonts, visibleStyles) {
   const style = visibleStyles[0] || STYLE_DEFS.find((item) => item.id === "regular") || STYLE_DEFS[0];
   catalog.innerHTML = `<div class="matrix">${fonts.map((font) => `<article class="matrix-card" data-font-id="${escapeHtml(font.id)}">
     <div class="family-line"><div class="family-name">${escapeHtml(font.family)}</div>${familyActions(font)}</div>
-    <div class="sample" style="${fontStyle(font, font.styles.includes(style.id) ? style : STYLE_DEFS.find((item) => font.styles.includes(item.id)) || style)}">${escapeHtml(state.previewText || " ")}</div>
+    <div class="sample" style="${fontStyle(font, styleForFont(font, [style]))}">${escapeHtml(state.previewText || " ")}</div>
     <div class="row-tags">${renderFontTags(font, 2)}</div>
   </article>`).join("")}</div>`;
 }
@@ -473,7 +473,7 @@ function renderLoupe(fonts, visibleStyles) {
   if (!fonts.some((font) => font.family === state.inspector.topFamily)) state.inspector.topFamily = fonts[0].family;
   const index = Math.max(0, fonts.findIndex((font) => font.family === state.inspector.topFamily));
   const font = fonts[index];
-  const preferred = visibleStyles.find((style) => font.styles.includes(style.id)) || STYLE_DEFS.find((style) => font.styles.includes(style.id)) || STYLE_DEFS[0];
+  const preferred = styleForFont(font, visibleStyles);
   catalog.innerHTML = `<article class="loupe-card" data-font-id="${escapeHtml(font.id)}">
     <div class="family-line"><div><div class="family-name">${escapeHtml(font.family)}</div><div class="meta">${font.designer ? `${escapeHtml(font.designer)} · ` : ""}${escapeHtml(font.category)} · ${index + 1} из ${fonts.length}</div></div>${familyActions(font)}</div>
     <div class="loupe-preview" style="${fontStyle(font, preferred)}">${escapeHtml(state.previewText || " ")}</div>
@@ -954,6 +954,10 @@ function renderFontCell(font, style) {
 
 function fontStyle(font, style) {
   return `font-family:&quot;${escapeHtml(font.family)}&quot;,${escapeHtml(font.category)};font-weight:${style.weight};font-style:${style.italic ? "italic" : "normal"};font-stretch:${fontStretch(font, style)}`;
+}
+
+function styleForFont(font, preferredStyles = []) {
+  return preferredStyles.find((style) => font.styles.includes(style.id)) || STYLE_DEFS.find((style) => font.styles.includes(style.id)) || STYLE_DEFS[0];
 }
 
 function fontStretch(font, style) {
