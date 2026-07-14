@@ -1,6 +1,148 @@
 {
   "schemaVersion": 2,
-  "updatedAt": null,
-  "families": {},
+  "updatedAt": "2026-07-14T16:59:05.594Z",
+  "families": {
+    "Alatsi": [
+      "._box"
+    ],
+    "Anonymous Pro": [
+      "._box"
+    ],
+    "Arimo": [
+      "._box"
+    ],
+    "BIZ UDGothic": [
+      "._box"
+    ],
+    "BIZ UDPGothic": [
+      "._box"
+    ],
+    "Climate Crisis": [
+      "._box"
+    ],
+    "Cousine": [
+      "._box"
+    ],
+    "Cuprum": [
+      "._box"
+    ],
+    "Finlandica Headline": [
+      "._box"
+    ],
+    "Finlandica Text": [
+      "._box"
+    ],
+    "Fragment Mono": [
+      "._box"
+    ],
+    "Geist": [
+      "._box"
+    ],
+    "Geist Mono": [
+      "._box"
+    ],
+    "Gothic A1": [
+      "._box"
+    ],
+    "Hanken Grotesk": [
+      "._box"
+    ],
+    "Istok Web": [
+      "._box"
+    ],
+    "Jura": [
+      "._box"
+    ],
+    "Libre Franklin": [
+      "._box"
+    ],
+    "Liter": [
+      "._box"
+    ],
+    "LXGW Marker Gothic": [
+      "._box"
+    ],
+    "M PLUS 1p": [
+      "._box"
+    ],
+    "Manrope": [
+      "._box"
+    ],
+    "Mulish": [
+      "._box"
+    ],
+    "News Cycle": [
+      "._box"
+    ],
+    "Nobile": [
+      "._box"
+    ],
+    "Nunito Sans": [
+      "._box"
+    ],
+    "Oswald": [
+      "._box"
+    ],
+    "Pixelify Sans": [
+      "._box"
+    ],
+    "Play": [
+      "._box"
+    ],
+    "Pliant": [
+      "._box"
+    ],
+    "Plus Jakarta Sans": [
+      "._box"
+    ],
+    "Press Start 2P": [
+      "._box"
+    ],
+    "Raleway": [
+      "._box"
+    ],
+    "Recursive": [
+      "._box"
+    ],
+    "Roboto Slab": [
+      "._box"
+    ],
+    "Rubik": [
+      "._box"
+    ],
+    "Rubik Mono One": [
+      "._box"
+    ],
+    "Ruda": [
+      "._box"
+    ],
+    "Ruslan Display": [
+      "._box"
+    ],
+    "Russo One": [
+      "._box"
+    ],
+    "Sansation": [
+      "._box"
+    ],
+    "Sawarabi Gothic": [
+      "._box"
+    ],
+    "Science Gothic": [
+      "._box"
+    ],
+    "Seymour One": [
+      "._box"
+    ],
+    "Stalinist One": [
+      "._box"
+    ],
+    "Tektur": [
+      "._box"
+    ],
+    "Tiny5": [
+      "._box"
+    ]
+  },
   "tagMeta": {}
 }
