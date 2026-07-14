@@ -105,7 +105,7 @@
     .font-table-scroll { overflow: auto; max-height: calc(100vh - 164px); overscroll-behavior: contain; }
     .font-table { display: grid; width: max-content; min-width: 100%; }
     .table-row { display: grid; grid-template-columns: var(--name-width) repeat(var(--visible-cols), var(--cell-width)); min-width: max-content; border-bottom: 1px solid var(--line); background: var(--surface); }
-    .table-row:not(.header-row), .gallery-card, .matrix-card { content-visibility: auto; contain-intrinsic-size: auto 150px; }
+    .table-row:not(.header-row), .gallery-card, .matrix-row:not(.matrix-header) { content-visibility: auto; contain-intrinsic-size: auto 150px; }
     .table-row:last-child { border-bottom: 0; }
     .table-row:hover:not(.header-row) > * { background-color: #fbfcfa; }
     .header-row { position: sticky; z-index: 12; top: 0; color: var(--muted); background: var(--surface-2); font-size: 11px; font-weight: 800; letter-spacing: .065em; text-transform: uppercase; }
@@ -176,14 +176,25 @@
     .tag-editor-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--line); background: var(--surface-2); }
     .tag-editor-actions button, .tag-editor-new button { min-height: 38px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: white; cursor: pointer; }
     .tag-editor-actions .primary, .tag-editor-new button { color: white; border-color: var(--accent); background: var(--accent); }
-    .matrix { display: grid; grid-template-columns: repeat(auto-fill,minmax(210px,1fr)); gap: 10px; }
-    .matrix-card { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); }
-    .matrix-card .sample { min-height: 54px; margin: 14px 0; font-size: max(15px,calc(var(--preview-size) * .72)); }
+    .matrix-scroll { max-height: calc(100vh - 164px); overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+    .matrix-grid { width: max-content; min-width: 100%; }
+    .matrix-row { display: grid; grid-template-columns: 190px repeat(var(--visible-cols),180px); min-width: max-content; border-bottom: 1px solid var(--line); }
+    .matrix-header { position: sticky; top: 0; z-index: 5; background: var(--surface-2); }
+    .matrix-family, .matrix-cell { min-width: 0; padding: 9px; border-right: 1px solid var(--line); }
+    .matrix-family { position: sticky; left: 0; z-index: 2; background: var(--surface); font-size: 12px; font-weight: 750; }
+    .matrix-header .matrix-family { z-index: 6; background: var(--surface-2); }
+    .matrix-cell { min-height: 68px; overflow: hidden; font-size: 17px; line-height: 1.05; }
+    .matrix-cell.missing { min-height: 68px; font-size: 18px; }
     .loupe-card { display: grid; gap: 18px; min-height: calc(100vh - 190px); padding: clamp(18px,4vw,52px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
     .loupe-preview { display: grid; align-items: center; min-height: 300px; overflow-wrap: anywhere; font-size: clamp(40px,9vw,140px); line-height: 1.02; }
     .loupe-nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; }
     .loupe-nav button { min-height: 46px; border: 1px solid var(--line); border-radius: 9px; color: var(--accent); background: white; cursor: pointer; }
-    .font-cell { min-height: 132px; overflow: hidden; }
+    .font-cell { position: relative; min-height: 132px; overflow: hidden; }
+    .font-cell:hover, .font-cell:focus-within { z-index: 8; overflow: visible; }
+    .cell-loupe { position: absolute; left: 10px; top: calc(100% - 8px); z-index: 20; display: none; width: min(420px,80vw); padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: white; box-shadow: 0 14px 45px rgba(25,32,28,.24); pointer-events: none; }
+    .font-cell:hover .cell-loupe, .font-cell:focus-within .cell-loupe { display: block; }
+    .cell-loupe .sample { font-size: max(30px,var(--preview-size)); }
+    .cell-loupe-extra { margin-top: 10px; color: var(--muted); font-size: 18px; letter-spacing: .02em; }
     .style-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
     .style-label { color: var(--muted); font-size: 11px; }
     .download-link, .family-page-link { border: 0; color: var(--accent); background: transparent; cursor: pointer; text-decoration: none; font-size: 11px; }
@@ -632,7 +643,7 @@
       return `<button class="favorite ${active ? "active" : ""}" type="button" data-favorite="${escapeHtml(font.family)}" aria-label="${active ? "Убрать из избранного" : "Добавить в избранное"}" aria-pressed="${active}">${active ? "★" : "☆"}</button>`;
     }
 
-    function renderFontCell(font, style) {
+function renderFontCell(font, style) {
       if (!font.styles.includes(style.id)) return `<div class="font-cell"><div class="style-label">Нет начертания</div><div class="missing">—</div></div>`;
       return `<div class="font-cell">
         <div class="style-label">${style.weight} · ${style.italic ? "курсив" : "прямое"}</div>
