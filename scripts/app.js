@@ -440,7 +440,7 @@ function allTags(font) {
 
 function sanitizeCustomTags(tags) {
   if (!Array.isArray(tags)) return [];
-  return [...new Set(tags.map((tag) => String(tag).trim().toLocaleLowerCase("ru")).filter(Boolean))].slice(0, 20);
+  return [...new Set(tags.map((tag) => String(tag).trim().toLocaleLowerCase("ru")).filter(Boolean))].slice(0, 99);
 }
 
 async function loadCentralTags() {
@@ -686,7 +686,7 @@ async function persistTagManagement() {
 
 async function editCustomTags(family) {
   const current = state.customTags.get(family) || [];
-  const answer = window.prompt(`Мои теги для ${family}\nВведите через запятую. Чтобы удалить все — оставьте поле пустым.`, current.join(", "));
+  const answer = window.prompt(`Мои теги для ${family}\nМожно назначить до 99 тегов. Введите их через запятую. Чтобы удалить все — оставьте поле пустым.`, current.join(", "));
   if (answer === null) return;
   const tags = sanitizeCustomTags(answer.split(","));
   tags.length ? state.customTags.set(family, tags) : state.customTags.delete(family);
