@@ -124,6 +124,7 @@ function normalizeFamily(font, variableFont, taggedFont) {
   return {
     id: slugify(font.family),
     family: font.family,
+    designer: font.designer || null,
     category: font.category || "unknown",
     version: font.version || null,
     lastModified: font.lastModified || null,
@@ -167,10 +168,16 @@ function normalizeVariant(variant, fileUrl, family) {
     name,
     weight,
     italic,
-    stretch: "normal",
+    stretch: inferStretch(family),
     ttfUrl: secureUrl(fileUrl),
     suggestedFileName: `${fileSafeName(family)}-${fileSafeName(name)}.ttf`
   };
+}
+
+function inferStretch(family) {
+  if (/\b(condensed|narrow|compressed|compact)\b/i.test(family)) return "condensed";
+  if (/\b(expanded|extended|wide)\b/i.test(family)) return "expanded";
+  return "normal";
 }
 
 function normalizeAxes(axes) {
