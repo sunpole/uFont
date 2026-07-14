@@ -154,7 +154,9 @@
     .inspector-control > label, .inspector-control-label { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
     .inspector-control-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .inspector-number { width: 100%; height: 36px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; }
-    .inspector-arrows { display: grid; grid-template-columns: repeat(3, 36px); grid-template-rows: repeat(2, 32px); justify-content: center; gap: 4px; }
+    .inspector-scale-row { display: grid; grid-template-columns: 44px 1fr 44px; gap: 6px; }
+    .inspector-scale-row button { min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: white; cursor: pointer; font-size: 20px; }
+    .inspector-arrows { display: grid; grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(2, 44px); justify-content: center; gap: 6px; }
     .inspector-arrows button { border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; }
     .inspector-arrows [data-nudge="up"] { grid-column: 2; }
     .inspector-arrows [data-nudge="left"] { grid-column: 1; grid-row: 2; }
@@ -163,6 +165,9 @@
     .inspector-action { min-height: 37px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); background: white; cursor: pointer; }
     .inspector-action:hover { background: #f4f8f5; }
     .inspector-action.danger { color: var(--danger); }
+    .inspector-font-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 14px 12px; touch-action: pan-y; }
+    .inspector-font-nav button { min-height: 46px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 9px; color: var(--accent); background: white; cursor: pointer; }
+    .inspector-font-nav button:active { background: var(--accent-soft); }
     .inspector-color { width: 100%; height: 38px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: white; }
     .is-hidden { display: none !important; }
 
@@ -187,6 +192,7 @@
       .segmented button { flex: 1; }
       .gallery { grid-template-columns: 1fr; }
       .inspector-stage { min-height: 420px; }
+      .inspector-font-nav button { min-height: 52px; font-size: 13px; }
       .font-name-cell { min-height: 122px; }
       .font-cell { min-height: 122px; }
     }
