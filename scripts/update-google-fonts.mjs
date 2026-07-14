@@ -51,7 +51,7 @@ const categoryCounts = countValues(families.map((font) => font.category));
 const subsetCounts = countValues(families.flatMap((font) => font.subsets));
 
 const database = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   generatedAt: new Date().toISOString(),
   source: {
     name: "Google Fonts Developer API",
