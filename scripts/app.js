@@ -43,6 +43,10 @@ const state = {
   requiredStyles: new Set(),
   selectedTags: new Set(),
   customTags: new Map(),
+  tagMeta: new Map(),
+  tagSort: "asc",
+  invertTagFilter: false,
+  tagScale: 100,
   tagStoreWritable: false,
   tagStoreUpdatedAt: null,
   condensedOnly: false,
@@ -97,6 +101,7 @@ initialize();
 
 async function initialize() {
   loadState();
+  configureEnvironmentLink();
   catalog.innerHTML = `<div class="empty-state"><strong>Загружаю базу шрифтов…</strong>Читаю data/fonts-cyrillic.json</div>`;
 
   try {
@@ -199,7 +204,10 @@ function loadState() {
     const sizeInPoints = saved.previewUnit === "pt" ? savedSize : Math.round(savedSize * 0.75);
     state.previewSize = Math.min(72, Math.max(8, sizeInPoints || 26));
     state.previewPpi = Math.min(2400, Math.max(72, Number(saved.previewPpi) || 300));
-    state.view = ["table", "gallery", "inspector"].includes(saved.view) ? saved.view : "table";
+    state.view = ["table", "gallery", "inspector", "tags"].includes(saved.view) ? saved.view : "table";
+    state.tagSort = saved.tagSort === "desc" ? "desc" : "asc";
+    state.invertTagFilter = Boolean(saved.invertTagFilter);
+    state.tagScale = Math.min(200, Math.max(50, Number(saved.tagScale) || 100));
   } catch {
     localStorage.removeItem(STORAGE_KEY);
   }
@@ -216,7 +224,10 @@ function saveState() {
     previewSize: state.previewSize,
     previewUnit: "pt",
     previewPpi: state.previewPpi,
-    view: state.view
+    view: state.view,
+    tagSort: state.tagSort,
+    invertTagFilter: state.invertTagFilter,
+    tagScale: state.tagScale
   }));
 }
 
@@ -235,6 +246,8 @@ function buildControls() {
   previewInput.value = state.previewText;
   sizeRange.value = String(state.previewSize);
   ppiInput.value = String(state.previewPpi);
+  $("#tagScale").value = String(state.tagScale);
+  applyTagScale();
   document.querySelectorAll("#sortOrder option").forEach((option) => option.toggleAttribute("selected", option.value === state.sortOrder));
   updateSize();
   updateViewButtons();
@@ -248,7 +261,8 @@ function filteredFonts() {
     if (query && !haystack.includes(query)) return false;
     if (state.categories.size && !state.categories.has(font.category)) return false;
     if (state.requiredStyles.size && [...state.requiredStyles].some((style) => !font.styles.includes(style))) return false;
-    if (state.selectedTags.size && [...state.selectedTags].some((tag) => !tags.includes(tag))) return false;
+    const hasEverySelectedTag = !state.selectedTags.size || [...state.selectedTags].every((tag) => tags.includes(tag));
+    if (state.selectedTags.size && (state.invertTagFilter ? hasEverySelectedTag : !hasEverySelectedTag)) return false;
     if (state.condensedOnly && !font.isCondensed) return false;
     if (state.variableOnly && !font.variable) return false;
     const isFavorite = state.favorites.has(font.family);
@@ -274,6 +288,11 @@ function render() {
   const visibleStyles = STYLE_DEFS.filter((style) => state.visibleStyles.has(style.id));
   $("#resultCount").textContent = `Найдено: ${fonts.length} из ${FONTS.length}`;
   $("#clearSearch").classList.toggle("is-hidden", !state.query);
+
+  if (state.view === "tags") {
+    renderTagManager();
+    return;
+  }
 
   if (!fonts.length) {
     catalog.innerHTML = `<div class="empty-state"><strong>Ничего не найдено</strong>Попробуйте убрать часть фильтров или изменить запрос.</div>`;
@@ -353,9 +372,10 @@ function inspectorTopControls(font, pool) {
 function inspectorBottomControls(font, pool) {
   const inspector = state.inspector;
   const sourceControls = `<div class="inspector-control"><div class="inspector-control-label">Содержимое нижнего слоя</div>
-    <div class="inspector-control-row"><button class="inspector-action" type="button" data-inspector-action="bottom-from-top">Закрепить верхний шрифт</button><button class="inspector-action" type="button" data-inspector-action="upload-image">Загрузить изображение</button></div>
+    <label for="inspector-bottom-source-font">Найти шрифт для нижнего слоя</label><input class="control" id="inspector-bottom-source-font" list="inspectorFonts" value="${inspector.bottomType === "font" ? escapeHtml(font.family) : ""}" data-inspector-font="bottom" placeholder="Начните вводить название…" autocomplete="off">
+    <div class="inspector-control-row"><button class="inspector-action" type="button" data-inspector-action="bottom-from-top">Взять верхний шрифт</button><button class="inspector-action" type="button" data-inspector-action="upload-image">Загрузить изображение</button></div>
     <button class="inspector-action danger" type="button" data-inspector-action="clear-bottom">Удалить изображение / нижний слой</button></div>`;
-  if (inspector.bottomType === "font") return `${sourceControls}${inspectorFontChooser("bottom", font, pool)}${inspectorLayerControls("bottom", true)}`;
+  if (inspector.bottomType === "font") return `${sourceControls}<div class="inspector-control"><label for="inspector-bottom-style">Начертание</label><select class="control" id="inspector-bottom-style" data-inspector-setting="bottomStyle">${STYLE_DEFS.filter((style) => font.styles.includes(style.id)).map((style) => `<option value="${style.id}" ${style.id === inspector.bottomStyle ? "selected" : ""}>${escapeHtml(style.name)}</option>`).join("")}</select></div>${inspectorLayerControls("bottom", true)}`;
   if (inspector.bottomType === "image") return `${sourceControls}<div class="meta">Изображение: ${escapeHtml(inspector.imageName || "без названия")}</div>${inspectorLayerControls("bottom", false)}`;
   return `${sourceControls}<div class="empty-state" style="padding:24px 12px"><strong style="font-size:15px">Нижний слой пуст</strong>Добавьте изображение или закрепите текущий верхний шрифт.</div>`;
 }
@@ -401,7 +421,7 @@ function familyActions(font) {
 }
 
 function renderFontTags(font, limit) {
-  const custom = customTagsFor(font).map((tag) => `<button class="mini-tag custom" type="button" data-tag="${escapeHtml(tag)}" title="Пользовательский тег">${escapeHtml(tag)}</button>`);
+  const custom = customTagsFor(font).map((tag) => `<button class="mini-tag custom" type="button" data-tag="${escapeHtml(tag)}" title="Пользовательский тег" style="${tagColorStyle(tag)}">${escapeHtml(tag)}</button>`);
   const builtIn = font.tags.filter((tag) => !customTagsFor(font).includes(tag)).map(tagButton);
   return [...custom, ...builtIn].slice(0, limit).join("");
 }
@@ -442,10 +462,12 @@ async function loadCentralTags() {
   }
 
   state.customTags = normalizeTagDatabase(database?.families);
+  state.tagMeta = normalizeTagMeta(database?.tagMeta);
   if (!state.tagStoreWritable) {
     try {
       const draft = JSON.parse(localStorage.getItem(TAG_DRAFT_STORAGE_KEY));
       state.customTags = mergeTagMaps(state.customTags, normalizeTagDatabase(draft?.families));
+      state.tagMeta = mergeTagMeta(state.tagMeta, normalizeTagMeta(draft?.tagMeta));
     } catch {
       localStorage.removeItem(TAG_DRAFT_STORAGE_KEY);
     }
@@ -474,6 +496,26 @@ function normalizeTagDatabase(families) {
   return output;
 }
 
+function normalizeTagMeta(input) {
+  const output = new Map();
+  if (!input || typeof input !== "object" || Array.isArray(input)) return output;
+  for (const [inputTag, metadata] of Object.entries(input)) {
+    const tag = sanitizeCustomTags([inputTag])[0];
+    if (!tag) continue;
+    const color = normalizeColor(metadata?.color);
+    output.set(tag, { color });
+  }
+  return output;
+}
+
+function mergeTagMeta(base, incoming) {
+  return new Map([...base, ...incoming]);
+}
+
+function normalizeColor(value) {
+  return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value).toLowerCase() : "#d9b83f";
+}
+
 function canonicalFamilyName(value) {
   const name = String(value || "").trim();
   if (!name) return "";
@@ -488,9 +530,10 @@ function mergeTagMaps(base, incoming) {
 
 function tagDatabaseObject() {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     updatedAt: new Date().toISOString(),
-    families: Object.fromEntries([...state.customTags].sort(([a], [b]) => a.localeCompare(b, "ru")))
+    families: Object.fromEntries([...state.customTags].sort(([a], [b]) => a.localeCompare(b, "ru"))),
+    tagMeta: Object.fromEntries([...state.tagMeta].sort(([a], [b]) => a.localeCompare(b, "ru")))
   };
 }
 
@@ -528,9 +571,11 @@ async function importTagsFile(file) {
   try {
     const database = JSON.parse(await file.text());
     const incoming = normalizeTagDatabase(database?.families);
-    if (!incoming.size) throw new Error("В файле нет пользовательских тегов.");
+    const incomingMeta = normalizeTagMeta(database?.tagMeta);
+    if (!incoming.size && !incomingMeta.size) throw new Error("В файле нет пользовательских тегов.");
     const before = countAssignedTags(state.customTags);
     state.customTags = mergeTagMaps(state.customTags, incoming);
+    state.tagMeta = mergeTagMeta(state.tagMeta, incomingMeta);
     const added = countAssignedTags(state.customTags) - before;
     await saveTagsToCurrentStore();
     renderCustomTagFilters();
@@ -547,10 +592,96 @@ function countAssignedTags(tagMap) {
 }
 
 function renderCustomTagFilters() {
-  const tags = [...new Set([...state.customTags.values()].flat())].sort((a, b) => a.localeCompare(b, "ru"));
+  const tags = allCustomTagNames().sort((a, b) => (state.tagSort === "desc" ? -1 : 1) * a.localeCompare(b, "ru"));
   $("#customTagFilters").innerHTML = tags.length
-    ? tags.map((tag) => `<button class="tag-button custom" type="button" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`).join("")
+    ? tags.map((tag) => `<button class="tag-button custom" type="button" data-tag="${escapeHtml(tag)}" style="${tagColorStyle(tag)}">${escapeHtml(tag)}</button>`).join("")
     : `<span class="user-tags-empty">Добавьте тег кнопкой «＋ тег» возле семейства.</span>`;
+}
+
+function allCustomTagNames() {
+  return [...new Set([...state.customTags.values()].flat().concat([...state.tagMeta.keys()]))];
+}
+
+function tagColorStyle(tag) {
+  const color = state.tagMeta.get(tag)?.color || "#d9b83f";
+  return `--tag-color:${color};border-color:${color};background:${color};color:${readableTextColor(color)}`;
+}
+
+function readableTextColor(color) {
+  const value = normalizeColor(color).slice(1);
+  const red = Number.parseInt(value.slice(0, 2), 16);
+  const green = Number.parseInt(value.slice(2, 4), 16);
+  const blue = Number.parseInt(value.slice(4, 6), 16);
+  return (red * 299 + green * 587 + blue * 114) / 1000 > 150 ? "#171816" : "#ffffff";
+}
+
+function renderTagManager() {
+  const tags = allCustomTagNames().sort((a, b) => (state.tagSort === "desc" ? -1 : 1) * a.localeCompare(b, "ru"));
+  $("#resultCount").textContent = `Пользовательских тегов: ${tags.length}`;
+  catalog.innerHTML = `<div class="tag-manager"><section class="tag-manager-card">
+    <div class="tag-manager-head"><div><div class="family-name">Управление пользовательскими тегами</div><div class="meta">Цвета, переименование и очистка сохраняются вместе с базой тегов.</div></div>
+      <div class="tag-manager-actions"><button class="tag-manager-button" type="button" data-tag-manager-action="add">＋ Новый тег</button><button class="tag-manager-button danger" type="button" data-tag-manager-action="clear">Очистить все</button></div></div>
+    <div class="tag-manager-list">${tags.length ? tags.map((tag) => {
+      const count = [...state.customTags.values()].filter((items) => items.includes(tag)).length;
+      const color = state.tagMeta.get(tag)?.color || "#d9b83f";
+      return `<div class="tag-manager-row"><input type="color" value="${color}" data-tag-color="${escapeHtml(tag)}" aria-label="Цвет тега ${escapeHtml(tag)}"><span class="tag-button custom" style="${tagColorStyle(tag)}">${escapeHtml(tag)}</span><span class="tag-manager-count">${count} сем.</span><button class="tag-manager-button" type="button" data-tag-rename="${escapeHtml(tag)}">Переименовать</button><button class="tag-manager-button danger" type="button" data-tag-delete="${escapeHtml(tag)}">Удалить</button></div>`;
+    }).join("") : `<div class="empty-state"><strong>Пока нет пользовательских тегов</strong>Создайте первый тег или добавьте его возле любого семейства.</div>`}</div>
+  </section></div>`;
+}
+
+async function addManagedTag() {
+  const answer = window.prompt("Название нового пользовательского тега:", "");
+  if (answer === null) return;
+  const tag = sanitizeCustomTags([answer])[0];
+  if (!tag) return;
+  if (!state.tagMeta.has(tag)) state.tagMeta.set(tag, { color: "#d9b83f" });
+  await persistTagManagement();
+}
+
+async function renameManagedTag(oldTag) {
+  const answer = window.prompt(`Новое название для тега «${oldTag}»:`, oldTag);
+  if (answer === null) return;
+  const newTag = sanitizeCustomTags([answer])[0];
+  if (!newTag || newTag === oldTag) return;
+  for (const [family, tags] of state.customTags) {
+    if (!tags.includes(oldTag)) continue;
+    state.customTags.set(family, sanitizeCustomTags(tags.map((tag) => tag === oldTag ? newTag : tag)));
+  }
+  const metadata = state.tagMeta.get(oldTag) || { color: "#d9b83f" };
+  state.tagMeta.delete(oldTag);
+  if (!state.tagMeta.has(newTag)) state.tagMeta.set(newTag, metadata);
+  if (state.selectedTags.delete(oldTag)) state.selectedTags.add(newTag);
+  await persistTagManagement();
+}
+
+async function deleteManagedTag(tag) {
+  if (!window.confirm(`Удалить тег «${tag}» из всех семейств?`)) return;
+  for (const [family, tags] of [...state.customTags]) {
+    const next = tags.filter((item) => item !== tag);
+    next.length ? state.customTags.set(family, next) : state.customTags.delete(family);
+  }
+  state.tagMeta.delete(tag);
+  state.selectedTags.delete(tag);
+  await persistTagManagement();
+}
+
+async function clearManagedTags() {
+  if (!window.confirm("Удалить все пользовательские теги, цвета и связи со шрифтами?")) return;
+  state.customTags.clear();
+  state.tagMeta.clear();
+  state.selectedTags.clear();
+  await persistTagManagement();
+}
+
+async function persistTagManagement() {
+  try {
+    await saveTagsToCurrentStore();
+    renderCustomTagFilters();
+    syncFilterUI();
+    render();
+  } catch (error) {
+    window.alert(`Не удалось сохранить теги: ${error.message}`);
+  }
 }
 
 async function editCustomTags(family) {
@@ -559,6 +690,7 @@ async function editCustomTags(family) {
   if (answer === null) return;
   const tags = sanitizeCustomTags(answer.split(","));
   tags.length ? state.customTags.set(family, tags) : state.customTags.delete(family);
+  for (const tag of tags) if (!state.tagMeta.has(tag)) state.tagMeta.set(tag, { color: "#d9b83f" });
   try {
     await saveTagsToCurrentStore();
   } catch (error) {
@@ -671,6 +803,19 @@ function updateSize() {
   $("#sizeConversion").innerHTML = `<strong>${millimeters.toFixed(2)} мм</strong> · ≈${Math.round(printPixels)} px при ${state.previewPpi} PPI<br>${pixelsPerMillimeter.toFixed(3)} px на 1 мм`;
 }
 
+function configureEnvironmentLink() {
+  const link = $("#environmentLink");
+  if (!link) return;
+  const onGitHubPages = location.hostname?.toLowerCase().endsWith("github.io");
+  link.href = onGitHubPages ? "http://localhost:4173/" : "https://sunpole.github.io/uFont/";
+  link.textContent = onGitHubPages ? "Локально ↗" : "GitHub Pages ↗";
+}
+
+function applyTagScale() {
+  document.documentElement.style.setProperty("--custom-tag-scale", String(state.tagScale / 100));
+  $("#tagScaleOutput").value = `${state.tagScale}%`;
+}
+
 function updateViewButtons() {
   document.querySelectorAll("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === state.view));
 }
@@ -687,6 +832,12 @@ function syncFilterUI() {
   $("#variableOnly").checked = state.variableOnly;
   document.querySelectorAll("#fontScope option").forEach((option) => option.toggleAttribute("selected", option.value === state.fontScope));
   document.querySelectorAll("#sortOrder option").forEach((option) => option.toggleAttribute("selected", option.value === state.sortOrder));
+  document.querySelectorAll("#customTagSort option").forEach((option) => option.toggleAttribute("selected", option.value === state.tagSort));
+  $("#invertTagFilter").classList.toggle("active", state.invertTagFilter);
+  $("#invertTagFilter").setAttribute("aria-pressed", String(state.invertTagFilter));
+  $("#invertTagFilter").textContent = state.invertTagFilter ? "Инверсия: вкл." : "Инверсия: выкл.";
+  $("#tagScale").value = String(state.tagScale);
+  applyTagScale();
   searchInput.value = state.query;
 }
 
@@ -699,6 +850,7 @@ function resetFilters() {
   state.condensedOnly = false;
   state.variableOnly = false;
   state.fontScope = "working";
+  state.invertTagFilter = false;
   state.sortOrder = "alphabetical";
   state.previewText = DEFAULT_TEXT;
   state.previewSize = 26;
@@ -733,6 +885,14 @@ function bindEvents() {
   $("#fontScope").addEventListener("change", (event) => { state.fontScope = event.target.value; saveState(); render(); });
   $("#tagFilters").addEventListener("click", (event) => toggleTag(event.target.closest("[data-tag]")?.dataset.tag));
   $("#customTagFilters").addEventListener("click", (event) => toggleTag(event.target.closest("[data-tag]")?.dataset.tag));
+  $("#customTagSort").addEventListener("change", (event) => { state.tagSort = event.target.value === "desc" ? "desc" : "asc"; renderCustomTagFilters(); saveState(); if (state.view === "tags") render(); });
+  $("#invertTagFilter").addEventListener("click", () => { state.invertTagFilter = !state.invertTagFilter; syncFilterUI(); saveState(); render(); });
+  $("#tagScale").addEventListener("input", (event) => {
+    const value = Number(event.target.value);
+    state.tagScale = Math.abs(value - 100) <= 5 ? 100 : value;
+    event.target.value = String(state.tagScale);
+    applyTagScale(); saveState();
+  });
   $("#exportTags").addEventListener("click", exportTagsFile);
   $("#importTags").addEventListener("click", () => $("#importTagsFile").click());
   $("#importTagsFile").addEventListener("change", async (event) => {
@@ -755,6 +915,14 @@ function bindEvents() {
     if (download) { downloadFont(download); return; }
     const editTags = event.target.closest("[data-edit-tags]");
     if (editTags) { editCustomTags(editTags.dataset.editTags); return; }
+    const addTag = event.target.closest("[data-tag-manager-action='add']");
+    if (addTag) { addManagedTag(); return; }
+    const clearTags = event.target.closest("[data-tag-manager-action='clear']");
+    if (clearTags) { clearManagedTags(); return; }
+    const renameTag = event.target.closest("[data-tag-rename]");
+    if (renameTag) { renameManagedTag(renameTag.dataset.tagRename); return; }
+    const deleteTag = event.target.closest("[data-tag-delete]");
+    if (deleteTag) { deleteManagedTag(deleteTag.dataset.tagDelete); return; }
     const inspectorLayer = event.target.closest("[data-inspector-select-layer]");
     if (inspectorLayer) { state.inspector.activeLayer = inspectorLayer.dataset.inspectorSelectLayer; render(); return; }
     const inspectorAction = event.target.closest("[data-inspector-action]");
@@ -794,6 +962,13 @@ function bindEvents() {
       state.requiredStyles.clear();
       syncFilterUI(); render();
     }
+  });
+
+  document.addEventListener("change", (event) => {
+    const tag = event.target.dataset.tagColor;
+    if (!tag) return;
+    state.tagMeta.set(tag, { color: normalizeColor(event.target.value) });
+    persistTagManagement();
   });
 }
 
@@ -887,6 +1062,13 @@ function handleInspectorChange(event) {
     const family = canonicalFamilyName(event.target.value);
     const font = FONTS.find((item) => item.family === family);
     if (!font) { render(); return; }
+    if (fontLayer === "bottom") {
+      if (state.inspector.imageUrl) URL.revokeObjectURL(state.inspector.imageUrl);
+      state.inspector.imageUrl = "";
+      state.inspector.imageName = "";
+      state.inspector.bottomType = "font";
+      state.inspector.activeLayer = "bottom";
+    }
     state.inspector[`${fontLayer}Family`] = font.family;
     if (!font.styles.includes(state.inspector[`${fontLayer}Style`])) state.inspector[`${fontLayer}Style`] = font.styles[0] || "regular";
     render();
