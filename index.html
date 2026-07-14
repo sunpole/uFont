@@ -56,6 +56,12 @@
     .text-button { padding: 2px 0; border: 0; color: var(--accent); background: none; cursor: pointer; font-size: 12px; }
     .text-button:hover { text-decoration: underline; }
     .control { width: 100%; height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: white; }
+    .multi-select { position: relative; }
+    .multi-select summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; background: white; cursor: pointer; list-style: none; }
+    .multi-select summary::-webkit-details-marker { display: none; }
+    .multi-select[open] summary { border-color: #8ca397; box-shadow: 0 0 0 3px rgba(32,95,70,.1); }
+    .multi-select-panel { display: grid; position: absolute; z-index: 40; top: calc(100% + 5px); left: 0; right: 0; gap: 9px; max-height: 310px; overflow: auto; padding: 11px; border: 1px solid var(--line); border-radius: 10px; background: white; box-shadow: var(--shadow); }
+    .multi-select-clear { min-height: 32px; border: 1px solid var(--line); border-radius: 7px; color: var(--accent); background: #f7faf8; cursor: pointer; }
     .range-row { display: grid; grid-template-columns: 1fr 48px; align-items: center; gap: 10px; }
     input[type="range"] { width: 100%; accent-color: var(--accent); }
     output { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
@@ -99,7 +105,11 @@
     .header-cell:first-child { z-index: 15; background: var(--surface-2); }
     .font-name-cell { min-height: 132px; }
     .family-line { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
+    .family-title { display: flex; min-width: 0; align-items: flex-start; gap: 5px; }
     .family-name { overflow-wrap: anywhere; font-size: 19px; font-weight: 750; line-height: 1.12; letter-spacing: -.025em; }
+    .rare-toggle { flex: none; width: 28px; height: 28px; margin: -4px 0 0 -5px; border: 0; border-radius: 50%; color: #a2a69f; background: transparent; cursor: pointer; font-size: 18px; line-height: 1; }
+    .rare-toggle:hover { color: var(--danger); background: #fae9e7; }
+    .rare-toggle.active { color: #fff; background: var(--danger); }
     .favorite { flex: none; width: 30px; height: 30px; border: 0; border-radius: 50%; color: #a2a69f; background: transparent; cursor: pointer; font-size: 20px; line-height: 1; }
     .favorite:hover { color: #c78418; background: #fff4dd; }
     .favorite.active { color: #c78418; }
@@ -223,10 +233,14 @@
         </section>
 
         <section class="sidebar-section">
-          <h2 class="section-title">Семейство содержит</h2>
-          <select class="control" id="requireStyle">
-            <option value="">Любые начертания</option>
-          </select>
+          <h2 class="section-title">Семейство содержит <button class="text-button" type="button" data-action="clear-required-styles">Сбросить</button></h2>
+          <details class="multi-select" id="requiredStylesMenu">
+            <summary><span id="requiredStylesSummary">Любые начертания</span><span aria-hidden="true">⌄</span></summary>
+            <div class="multi-select-panel">
+              <div class="check-list" id="requiredStyleFilters"></div>
+              <button class="multi-select-clear" type="button" data-action="clear-required-styles">Очистить выбор</button>
+            </div>
+          </details>
         </section>
 
         <section class="sidebar-section">
@@ -250,8 +264,15 @@
           <div class="check-list">
             <label class="check"><input id="condensedOnly" type="checkbox"> Только Condensed / Narrow</label>
             <label class="check"><input id="variableOnly" type="checkbox"> Только variable</label>
-            <label class="check"><input id="favoritesOnly" type="checkbox"> Только избранные</label>
           </div>
+          <label class="is-hidden" for="fontScope">Какие шрифты показывать</label>
+          <select class="control" id="fontScope" style="margin-top:12px">
+            <option value="working">Рабочие — без редких</option>
+            <option value="all">Все шрифты</option>
+            <option value="favorites">Только избранные</option>
+            <option value="rare">Только редкие</option>
+            <option value="marked">Избранные + редкие</option>
+          </select>
           <label class="is-hidden" for="sortOrder">Сортировка</label>
           <select class="control" id="sortOrder" style="margin-top:12px">
             <option value="alphabetical">По алфавиту</option>
