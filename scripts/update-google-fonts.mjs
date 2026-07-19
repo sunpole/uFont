@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const API_URL = "https://www.googleapis.com/webfonts/v1/webfonts";
+const SITE_METADATA_URL = "https://fonts.google.com/metadata/fonts";
 const DOCS_URL = "https://developers.google.com/fonts/docs/developer_api";
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_DIR = resolve(SCRIPT_DIR, "..");
@@ -30,16 +31,19 @@ console.log("uFont: получаю каталог Google Fonts…");
 const standardCatalog = await requestCatalog([], "основной каталог");
 const variableCatalog = await requestCatalog(["VF"], "variable-данные", true);
 const tagsCatalog = await requestCatalog(["FAMILY_TAGS"], "теги", true);
+const siteMetadata = await requestSiteMetadata();
 
 const variableByFamily = indexByFamily(variableCatalog.items);
 const tagsByFamily = indexByFamily(tagsCatalog.items);
+const metadataByFamily = new Map((siteMetadata.familyMetadataList || []).map((font) => [font.family, font]));
 
 const families = standardCatalog.items
   .filter(supportsCyrillic)
   .map((font) => normalizeFamily(
     font,
     variableByFamily.get(font.family),
-    tagsByFamily.get(font.family)
+    tagsByFamily.get(font.family),
+    metadataByFamily.get(font.family)
   ))
   .sort((a, b) => a.family.localeCompare(b.family, "en"));
 
@@ -47,11 +51,12 @@ const categoryCounts = countValues(families.map((font) => font.category));
 const subsetCounts = countValues(families.flatMap((font) => font.subsets));
 
 const database = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   generatedAt: new Date().toISOString(),
   source: {
     name: "Google Fonts Developer API",
     api: API_URL,
+    designerMetadata: SITE_METADATA_URL,
     documentation: DOCS_URL
   },
   criteria: {
@@ -114,7 +119,7 @@ function supportsCyrillic(font) {
   return font.subsets?.includes("cyrillic") || font.subsets?.includes("cyrillic-ext");
 }
 
-function normalizeFamily(font, variableFont, taggedFont) {
+function normalizeFamily(font, variableFont, taggedFont, siteFont) {
   const axes = normalizeAxes(variableFont?.axes);
   const styles = (font.variants || [])
     .map((variant) => normalizeVariant(variant, font.files?.[variant], font.family))
@@ -124,6 +129,7 @@ function normalizeFamily(font, variableFont, taggedFont) {
   return {
     id: slugify(font.family),
     family: font.family,
+    designer: normalizeDesigner(siteFont?.designers || font.designer),
     category: font.category || "unknown",
     version: font.version || null,
     lastModified: font.lastModified || null,
@@ -138,6 +144,28 @@ function normalizeFamily(font, variableFont, taggedFont) {
       Object.entries(variableFont?.files || {}).map(([variant, url]) => [variant, secureUrl(url)])
     )
   };
+}
+
+async function requestSiteMetadata() {
+  try {
+    const response = await fetch(SITE_METADATA_URL, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(30_000) });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    const text = await response.text();
+    const jsonStart = text.indexOf("{");
+    const body = JSON.parse(jsonStart >= 0 ? text.slice(jsonStart) : text);
+    if (!Array.isArray(body?.familyMetadataList)) throw new Error("ответ не содержит familyMetadataList");
+    return body;
+  } catch (error) {
+    console.warn(`uFont: не удалось получить имена дизайнеров: ${error.message}`);
+    console.warn("uFont: продолжаю без дизайнерских метаданных.");
+    return { familyMetadataList: [] };
+  }
+}
+
+function normalizeDesigner(value) {
+  const names = Array.isArray(value) ? value : value ? [value] : [];
+  const clean = [...new Set(names.map((name) => String(name).trim()).filter(Boolean))];
+  return clean.length ? clean.join(", ") : null;
 }
 
 function normalizeVariant(variant, fileUrl, family) {
@@ -167,10 +195,16 @@ function normalizeVariant(variant, fileUrl, family) {
     name,
     weight,
     italic,
-    stretch: "normal",
+    stretch: inferStretch(family),
     ttfUrl: secureUrl(fileUrl),
     suggestedFileName: `${fileSafeName(family)}-${fileSafeName(name)}.ttf`
   };
+}
+
+function inferStretch(family) {
+  if (/\b(condensed|narrow|compressed|compact)\b/i.test(family)) return "condensed";
+  if (/\b(expanded|extended|wide)\b/i.test(family)) return "expanded";
+  return "normal";
 }
 
 function normalizeAxes(axes) {

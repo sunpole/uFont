@@ -65,7 +65,7 @@ async function handleUserTags(request, response) {
     const tagMeta = normalizeTagMeta(input?.tagMeta);
     const preferences = normalizePreferences(input?.preferences);
     const database = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       updatedAt: new Date().toISOString(),
       families,
       tagMeta,
@@ -108,14 +108,15 @@ function normalizePreferences(value) {
   if (value == null) return {};
   if (typeof value !== "object" || Array.isArray(value)) throw new Error("preferences must be an object");
   const output = {};
-  const arrayLimits = { visibleStyles: [8, 30], favorites: [3000, 160], rareFonts: [3000, 160], categories: [20, 60], requiredStyles: [8, 30], selectedTags: [99, 60], collapsedSections: [10, 40] };
+  const arrayLimits = { visibleStyles: [18, 30], favorites: [3000, 160], rareFonts: [3000, 160], categories: [20, 60], requiredStyles: [18, 30], selectedSubsets: [8, 30], selectedTags: [99, 60], collapsedSections: [10, 40] };
   for (const [key, [limit, length]] of Object.entries(arrayLimits)) output[key] = normalizeStringArray(value[key], limit, length);
   const strings = { fontScope: 20, sortOrder: 30, previewText: 160, previewUnit: 10, view: 20, tagSort: 10, query: 160 };
   for (const [key, length] of Object.entries(strings)) if (typeof value[key] === "string") output[key] = value[key].slice(0, length);
-  const numbers = { previewSize: [8, 72], previewPpi: [72, 2400], tagScale: [50, 200] };
+  const numbers = { previewSize: [8, 72], previewPpi: [72, 2400], tagScale: [50, 200], googleTagScale: [50, 200], customTagScale: [50, 200] };
   for (const [key, [min, max]] of Object.entries(numbers)) output[key] = clampNumber(value[key], min, max);
   output.invertTagFilter = Boolean(value.invertTagFilter);
   output.condensedOnly = Boolean(value.condensedOnly);
+  output.expandedOnly = Boolean(value.expandedOnly);
   output.variableOnly = Boolean(value.variableOnly);
   output.inspector = normalizeInspector(value.inspector);
   return output;
